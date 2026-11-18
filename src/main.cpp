@@ -161,6 +161,7 @@ int cmd_ingest_books(int argc, char** argv) {
         const std::string text = read_file_text(fpath);
         if (text.empty()) continue;
         bundle.lexicon.observe(text, bundle.parser, "technical");
+        bundle.coherence.observe(text, bundle.parser);
 
         auto doc = (parser_mode == "conllu" || fs::path(fpath).extension() == ".conllu")
             ? bundle.parser.parse_conllu(text) : bundle.parser.parse_text(text);
@@ -259,6 +260,7 @@ int cmd_train_dialogue(int argc, char** argv) {
         if (intent_str == "EXPLAIN_CAUSE" || intent_str == "HYPOTHESIZE") tone = "didactic";
         else if (intent_str == "GREET" || intent_str == "THANK" || intent_str == "SMALLTALK") tone = "casual";
         bundle.lexicon.observe(text, bundle.parser, tone);
+        bundle.coherence.observe(text, bundle.parser);
         bundle.fluent_realizer.observe(text, bundle.parser);
         for (auto& pair : realizer_document_pairs(bundle.parser.parse_text(text)))
             bundle.realizer_pairs.push_back(std::move(pair));
@@ -417,6 +419,8 @@ int cmd_stats(int argc, char** argv) {
               << " entidades, turno " << bundle.context_memory.turn() << "\n"
               << "  Lexico do corpus       : " << bundle.lexicon.entries() << " entradas, "
               << bundle.lexicon.collocations() << " colocacoes\n"
+              << "  Coerencia (KN)         : " << bundle.coherence.unigrams() << " unigramas, "
+              << bundle.coherence.bigrams() << " bigramas, " << bundle.coherence.trigrams() << " trigramas\n"
               << "  Tamanho em disco       : " << (disk_bytes / 1024.0) << " KB\n"
               << "  RAM estimada           : " << (ram_bytes / 1024.0) << " KB\n";
     return 0;

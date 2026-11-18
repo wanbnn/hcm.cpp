@@ -85,6 +85,7 @@ set(COGNICORE_SOURCES
     src/sdm.cpp
     src/tsetlin.cpp
     src/causal_graph.cpp
+    src/coherence.cpp
     src/graph_mmap.cpp
     src/text_parser.cpp
     src/realizer.cpp
@@ -199,6 +200,11 @@ add_executable(test_marco14_lexicalized tests/test_marco14_lexicalized.cpp)
 target_link_libraries(test_marco14_lexicalized PRIVATE cognicore_lib)
 target_compile_options(test_marco14_lexicalized PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)
 add_test(NAME test_marco14_lexicalized COMMAND test_marco14_lexicalized)
+
+add_executable(test_marco15_coherence tests/test_marco15_coherence.cpp)
+target_link_libraries(test_marco15_coherence PRIVATE cognicore_lib)
+target_compile_options(test_marco15_coherence PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)
+add_test(NAME test_marco15_coherence COMMAND test_marco15_coherence)
 
 add_executable(test_improvements tests/test_improvements.cpp)
 target_link_libraries(test_improvements PRIVATE cognicore_lib)

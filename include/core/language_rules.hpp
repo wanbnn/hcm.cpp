@@ -50,6 +50,7 @@ struct LanguageRules {
     std::vector<std::string> aggregation_patterns;
     std::vector<std::string> punctuation_sentence;
     std::vector<std::string> punctuation_clause;
+    std::vector<std::string> centering_pronouns;
 
     bool load(const std::string& path);
     bool save(const std::string& path) const;

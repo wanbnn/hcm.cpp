@@ -613,6 +613,14 @@ ModelBundle::InferenceTrace ModelBundle::infer_and_respond(const std::string& us
     if (const auto* fluent = dynamic_cast<const AnalogicalFluencyRealizer*>(surface)) {
         const auto derivation = fluent->derive(lexical_plan);
         trace.response = derivation.candidates[derivation.selected].text;
+        if (!coherence.empty() && derivation.candidates.size() > 1) {
+            std::vector<std::string> texts;
+            for (const auto& candidate : derivation.candidates) texts.push_back(candidate.text);
+            const auto previous = episodes.empty() ? std::string{} : episodes.back().second;
+            const auto coherent = coherence.choose(texts, plan, previous, graph, language_rules);
+            for (size_t i = 0; i < texts.size(); ++i)
+                if (texts[i] == coherent) { trace.response = coherent; break; }
+        }
         std::ostringstream audit;
         audit << "candidatas=" << derivation.candidates.size() << " selecionada=" << derivation.selected << " fragmentos recuperados=";
         for (auto id : derivation.retrieved_fragments) audit << id << ",";
@@ -679,6 +687,7 @@ bool ModelBundle::save(const std::string& dir_path) const {
     if (ec) return false;
     if (!language_rules.save(dir_path + "/language_rules.json")) return false;
     if (!lexicon.save(dir_path + "/lexicon.bin")) return false;
+    if (!coherence.save(dir_path + "/coherence.bin")) return false;
 
     {
         BinaryWriter w(dir_path + "/episodic_facts.bin");
@@ -886,6 +895,8 @@ bool ModelBundle::load(const std::string& dir_path, bool use_mmap) {
     lexicon.load_synonyms(language_rules);
     if (fs::exists(dir_path + "/lexicon.bin")) lexicon.load(dir_path + "/lexicon.bin");
     else lexicon.clear();
+    if (fs::exists(dir_path + "/coherence.bin")) coherence.load(dir_path + "/coherence.bin");
+    else coherence.clear();
     // 1. Codebook
     {
         MappedReader r(dir_path + "/codebook.bin", use_mmap);

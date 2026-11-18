@@ -294,5 +294,21 @@
   ],
   "punctuation_clause": [
     ", "
+  ],
+  "centering_pronouns": [
+    "ele",
+    "ela",
+    "eles",
+    "elas",
+    "isso",
+    "isto",
+    "este",
+    "esta",
+    "esse",
+    "essa",
+    "it",
+    "they",
+    "this",
+    "that"
   ]
 }
