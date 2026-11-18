@@ -37,7 +37,7 @@ void print_usage() {
               << "  cognicore evaluate-fluency --model <dir_modelo> --input <texto> [--out <relatorio.json>]\n"
               << "  cognicore write --model <dir_modelo> --topic <assunto> [--sections N] [--paragraphs N] [--realizer strict|lexical|fluent] [--out <arquivo.md>]\n"
               << "  cognicore math --expr \"2x + 3 = 11\" [--model <dir_modelo>]\n"
-              << "  cognicore chat --model <dir_modelo> [--workspace <dir>] [--realizer strict|lexical|fluent] [--lang cpp|py|js] [--online-learning] [--shape brief|explain|document] [--debug]\n";
+              << "  cognicore chat --model <dir_modelo> [--workspace <dir>] [--realizer strict|lexical|fluent] [--lang cpp|py|js] [--online-learning] [--shape brief|explain|document] [--prompt <texto>] [--no-save] [--debug]\n";
 }
 
 std::string get_arg(int argc, char** argv, const std::string& flag, const std::string& def = "") {
@@ -728,28 +728,40 @@ int cmd_chat(int argc, char** argv) {
     else if (!shape_arg.empty()) { std::cerr << "Shape inválido: use brief, explain ou document.\n"; return 1; }
     const auto language = string_to_code_lang(get_arg(argc, argv, "--lang", "cpp"));
     if (language == CodeLanguage::UNKNOWN) { std::cerr << "Linguagem inválida.\n"; return 1; }
-    std::ofstream history(session_dir + "/conversation.jsonl", std::ios::app);
-    std::cout << "CogniCore CPU-only chat pronto. Aprendizado online: "
-              << (session.online_learning() ? "ligado" : "desligado")
-              << ". Digite 'sair' para encerrar.\n";
+    const auto one_prompt = get_arg(argc, argv, "--prompt");
+    const bool no_save = has_flag(argc, argv, "--no-save") || !one_prompt.empty();
+    std::ofstream history;
+    if (!no_save) history.open(session_dir + "/conversation.jsonl", std::ios::app);
+    if (one_prompt.empty())
+        std::cout << "CogniCore CPU-only chat pronto. Aprendizado online: "
+                  << (session.online_learning() ? "ligado" : "desligado")
+                  << ". Digite 'sair' para encerrar.\n";
     std::string line;
     while (true) {
-        std::cout << "\nVoce> " << std::flush;
-        if (!std::getline(std::cin, line)) break;
-        if (line == "sair" || line == "exit" || line == "quit") break;
-        if (line.empty()) continue;
+        if (one_prompt.empty()) {
+            std::cout << "\nVoce> " << std::flush;
+            if (!std::getline(std::cin, line)) break;
+            if (line == "sair" || line == "exit" || line == "quit") break;
+            if (line.empty()) continue;
+        } else {
+            line = one_prompt;
+        }
 
         auto reply = session.respond(line, language, mouth);
         auto trace = reply.trace;
         trace.response = reply.text;
-        if (history) history << "{\"user\":\"" << json_escape(line) << "\",\"assistant\":\"" << json_escape(reply.text)
-                             << "\",\"route\":\"" << route_name(reply.route) << "\"}\n" << std::flush;
-        if (!bundle.save(session_dir)) { std::cerr << "Erro ao persistir sessão.\n"; return 1; }
-        bundle.refresh_mapped_graph(session_dir);
+        if (!no_save) {
+            if (history) history << "{\"user\":\"" << json_escape(line) << "\",\"assistant\":\"" << json_escape(reply.text)
+                                 << "\",\"route\":\"" << route_name(reply.route) << "\"}\n" << std::flush;
+            if (!bundle.save(session_dir)) { std::cerr << "Erro ao persistir sessão.\n"; return 1; }
+            bundle.refresh_mapped_graph(session_dir);
+        }
         if (debug) {
             std::cout << "[DEBUG] Rota: " << route_name(reply.route) << "\n" << trace.debug_report();
         }
-        std::cout << "CogniCore> " << trace.response << "\n";
+        if (one_prompt.empty()) std::cout << "CogniCore> ";
+        std::cout << trace.response << "\n" << std::flush;
+        if (!one_prompt.empty()) break;
     }
     return 0;
 }
