@@ -197,6 +197,12 @@ stopwords. O `ContentPlanner` escolhe o formato da resposta pelo conteúdo
 `DocumentPlanner` como renderizador. Ficha:
 [modelo v3.1](docs/MODEL_CONVERSA_PT_FLUENT_V31.md).
 
+A versão `models/conversa-pt-fluent-v3.2` dobra o corpus (1.306 artigos da
+Wikipédia, 245 livros do Gutenberg, ~110 MB), sobe o codebook para **128.000
+tipos**, adiciona fatos de Brasil/França/Itália/domínio (364 nós/287 arestas) e
+expande os padrões de código Python. Ficha:
+[modelo v3.2](docs/MODEL_CONVERSA_PT_FLUENT_V32.md).
+
 ## Benchmarks próprios
 
 `benchmarks/run_benchmarks.py` executa categorias inspiradas em GPQA, HLE, GSM8K,
@@ -226,5 +232,5 @@ Guia completo para treinar um modelo do zero (build, datasets, indexação, SFT,
 alignment, avaliação, fine-tuning, inferência e publicação):
 [treinar do zero](docs/TRAIN_FROM_SCRATCH.md).
 
-Resumo consolidado de corpus, treino, modelo v3.1, parser, discurso, prosa
-natural, mineração e busca: [resumo da implementação](docs/RESUMO_IMPLEMENTACAO.md).
+Resumo consolidado de corpus, treino, modelo v3.1/v3.2, parser, discurso,
+prosa natural, mineração e busca: [resumo da implementação](docs/RESUMO_IMPLEMENTACAO.md).

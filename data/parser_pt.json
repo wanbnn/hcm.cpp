@@ -451,7 +451,13 @@
     "habilitar",
     "preceder",
     "anteceder",
-    "completar"
+    "completar",
+    "ficar",
+    "localizar",
+    "situar",
+    "colonizar",
+    "originar",
+    "integrar"
   ],
   "verb_lemmas_en": [
     "analyze",
@@ -909,7 +915,10 @@
     "cidadão",
     "cidadao",
     "alemão",
-    "alemao"
+    "alemao",
+    "paris",
+    "país",
+    "pais"
   ],
   "singular_exceptions": [
     "gás",
@@ -918,7 +927,8 @@
     "país",
     "pais",
     "mais",
-    "menos"
+    "menos",
+    "paris"
   ],
   "np_boundary_prepositions": [
     "em",

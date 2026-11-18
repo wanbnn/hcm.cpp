@@ -13,7 +13,7 @@
 #include <unistd.h>
 namespace cognicore {
 namespace {
-constexpr size_t MAX_CONTEXTS = 80000, MAX_ENTRIES = 400000, MAX_FRAGMENTS = 2048;
+constexpr size_t MAX_CONTEXTS = 80000, MAX_ENTRIES = 2000000, MAX_FRAGMENTS = 4096;
 // Integer approximation of log2 in Q16; statistical ranking has no dense float operations.
 int64_t log_q16(uint64_t n) {
     if (!n) return 0;
@@ -503,12 +503,14 @@ bool AnalogicalFluencyRealizer::load(const std::string& path) {
     const auto* h = static_cast<const ArchiveHeader*>(m->data);
     if (h->magic != 0x444F5031 || h->version != 1 || h->fragments > MAX_FRAGMENTS || h->records > MAX_ENTRIES || (h->clauses && h->clauses != 96) || h->flags > 1) return false;
     const size_t required = sizeof(*h) + size_t(h->fragments) * sizeof(PhraseFragment) + size_t(h->records) * sizeof(PPMRecord) + size_t(h->clauses) * sizeof(DiskClause);
-    if (required != m->size || (h->flags && h->clauses != 96)) return false;
+    // Some writers leave harmless trailing alignment bytes; accept any
+    // archive that contains at least the declared sections.
+    if (required > m->size || (h->flags && h->clauses != 96)) return false;
     auto* ptr = static_cast<const char*>(m->data) + sizeof(*h);
     auto fs = std::span(reinterpret_cast<const PhraseFragment*>(ptr), h->fragments); ptr += fs.size_bytes();
     auto rs = std::span(reinterpret_cast<const PPMRecord*>(ptr), h->records); ptr += rs.size_bytes();
     for (size_t i = 0; i < fs.size(); ++i) if (fs[i].id != i || unsigned(fs[i].shape) > 3 || unsigned(fs[i].tone) > 3 || fs[i].english > 1 ||
-        (fs[i].relation != 255 && fs[i].relation > 4) ||
+        (fs[i].relation != 255 && fs[i].relation > static_cast<uint8_t>(RelationType::PRECEDES)) ||
         !std::memchr(fs[i].connective, 0, sizeof(fs[i].connective)) || !std::memchr(fs[i].clause_pattern, 0, sizeof(fs[i].clause_pattern)) || !std::memchr(fs[i].predicate, 0, sizeof(fs[i].predicate))) return false;
     for (size_t i = 0; i < rs.size(); ++i) if (rs[i].order > 5 || !rs[i].count || (i && !less_record(rs[i-1], rs[i]))) return false;
     SparseTsetlinModel style; style.num_features = 16; style.num_classes = 4; style.clauses_per_class = 24;

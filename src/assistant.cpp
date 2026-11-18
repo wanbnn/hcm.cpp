@@ -57,6 +57,25 @@ std::string document_topic(const std::string& lower, const LanguageRules& rules)
 bool code_followup(const std::string& lower, const LanguageRules& rules) {
     return rules.is_code_followup(lower);
 }
+
+bool contains_word_any(const std::string& text, const std::vector<std::string>& cues) {
+    for (const auto& cue : cues) {
+        if (cue.empty()) continue;
+        if (cue.find(' ') != std::string::npos) {
+            if (text.find(cue) != std::string::npos) return true;
+            continue;
+        }
+        size_t at = 0;
+        while ((at = text.find(cue, at)) != std::string::npos) {
+            const bool left_ok = at == 0 || !std::isalnum(static_cast<unsigned char>(text[at - 1]));
+            const size_t end = at + cue.size();
+            const bool right_ok = end >= text.size() || !std::isalnum(static_cast<unsigned char>(text[end]));
+            if (left_ok && right_ok) return true;
+            at = end;
+        }
+    }
+    return false;
+}
 }
 const char* route_name(AssistantRoute route) {
     static const char* names[] = {"CONVERSATIONAL_GENERAL", "CAUSAL_REASONING", "CODE_QUERY_OR_EXPLAIN",
@@ -119,6 +138,12 @@ AssistantReply AssistantSession::respond(const std::string& input, CodeLanguage 
     reply.route = router_.classify(input, model_, &routing);
     const auto lower = TextParser::utf8_tolower(input);
     const auto& rules = model_.language_rules;
+    // A factual question ("qual é a capital da França?") must not be routed
+    // to code-query merely because of an over-eager router feature.
+    if (reply.route == AssistantRoute::CODE_QUERY_OR_EXPLAIN &&
+        !contains_word_any(lower, rules.code_cues) &&
+        !contains_word_any(lower, rules.generation_cues))
+        reply.route = AssistantRoute::CONVERSATIONAL_GENERAL;
     if (reply.route == AssistantRoute::CONVERSATIONAL_GENERAL &&
         last_route_ == AssistantRoute::CODE_GENERATE_OR_PATCH && code_followup(lower, model_.language_rules))
         reply.route = AssistantRoute::CODE_GENERATE_OR_PATCH;
@@ -167,8 +192,13 @@ AssistantReply AssistantSession::respond(const std::string& input, CodeLanguage 
         content_plan = content.plan(input, model_.graph, model_.codebook, rules,
                                     &model_.terms, constraints, &model_.parser);
     }
+    const bool question_like = input.find('?') != std::string::npos ||
+        lower.starts_with("qual ") || lower.starts_with("quais ") ||
+        lower.starts_with("quem ") || lower.starts_with("onde ") ||
+        lower.starts_with("quando ") || lower.starts_with("o que ") ||
+        lower.starts_with("como ");
     const bool use_content = content_candidate && !content_plan.document.sections.empty() &&
-        (content_plan.shape != ResponseShape::BRIEF || document_request);
+        (content_plan.shape != ResponseShape::BRIEF || document_request || question_like);
     MorphologicalRealizer fallback(rules);
     const ISurfaceRealizer& surface = mouth ? *mouth : static_cast<const ISurfaceRealizer&>(fallback);
     if (math_answer) {

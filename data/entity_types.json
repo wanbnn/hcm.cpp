@@ -1,3 +1,34 @@
 {
-  "types": ["motor=MECHANISM","motor de combustão interna=MECHANISM","combustão=PROCESS","calor=PHENOMENON","gelo=MATERIAL","atrito=PHENOMENON","ciclo otto=CYCLE","admissão=STAGE","compressão=STAGE"]
+  "types": [
+    "motor=MECHANISM",
+    "motor de combustão interna=MECHANISM",
+    "combustão=PROCESS",
+    "calor=PHENOMENON",
+    "gelo=MATERIAL",
+    "atrito=PHENOMENON",
+    "ciclo otto=CYCLE",
+    "admissão=STAGE",
+    "compressão=STAGE",
+    "paris=CITY",
+    "roma=CITY",
+    "brasília=CITY",
+    "brasil=COUNTRY",
+    "frança=COUNTRY",
+    "itália=COUNTRY",
+    "europa=CONTINENT",
+    "américa do sul=CONTINENT",
+    "união europeia=ORGANIZATION",
+    "mercosul=ORGANIZATION",
+    "torre eiffel=LANDMARK",
+    "coliseu=LANDMARK",
+    "rio sena=RIVER",
+    "amazônia=REGION",
+    "são paulo=CITY",
+    "rio de janeiro=CITY",
+    "português=LANGUAGE",
+    "francês=LANGUAGE",
+    "italiano=LANGUAGE",
+    "real=CURRENCY",
+    "euro=CURRENCY"
+  ]
 }

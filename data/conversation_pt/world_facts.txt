@@ -1,0 +1,100 @@
+O Brasil é o maior país da América do Sul.
+Brasília é a capital do Brasil.
+O Brasil tem 26 estados.
+O real é a moeda do Brasil.
+O português é o idioma oficial do Brasil.
+O Brasil integra o Mercosul.
+A Amazônia fica no Brasil.
+O Rio de Janeiro fica no Brasil.
+São Paulo é a maior cidade do Brasil.
+O Brasil é uma república federativa.
+O futebol é popular no Brasil.
+O carnaval é uma festa popular no Brasil.
+A França é um país da Europa.
+Paris é a capital da França.
+O euro é a moeda da França.
+O francês é o idioma oficial da França.
+A França integra a União Europeia.
+A Torre Eiffel fica em Paris.
+O rio Sena fica na França.
+A França é uma república.
+A França produz vinho e queijo.
+A Itália é um país da Europa.
+Roma é a capital da Itália.
+O euro é a moeda da Itália.
+O italiano é o idioma oficial da Itália.
+A Itália integra a União Europeia.
+O Coliseu fica em Roma.
+A Itália é uma república.
+A Itália produz pizza e macarrão.
+A Europa é um continente.
+A América do Sul é um continente.
+A União Europeia é uma organização política.
+O Mercosul é um bloco econômico.
+O Brasil é o maior produtor de café do mundo.
+O Brasil produz café.
+O Brasil produz soja.
+O Brasil produz petróleo.
+O Brasil tem cinco regiões.
+O Brasil tem o Distrito Federal.
+O Brasil tem uma população de aproximadamente 203 milhões de habitantes.
+O Brasil integra os BRICS.
+O rio Amazonas fica no Brasil.
+O rio Amazonas é o maior rio do mundo.
+A Amazônia é a maior floresta tropical do mundo.
+O Pantanal fica no Brasil.
+O Cerrado fica no Brasil.
+A Mata Atlântica fica no Brasil.
+São Paulo é uma cidade do Brasil.
+O Rio de Janeiro é uma cidade do Brasil.
+Paris é uma cidade da França.
+O Louvre fica em Paris.
+A França produz perfume.
+A França integra a OTAN.
+A França fica na Europa.
+Roma é uma cidade da Itália.
+A Itália produz azeite.
+A Itália produz macarrão.
+A Itália integra a OTAN.
+A Itália fica na Europa.
+O Mar Mediterrâneo fica ao lado da Itália.
+Portugal é um país da Europa.
+Lisboa é a capital de Portugal.
+O português é o idioma oficial de Portugal.
+O euro é a moeda de Portugal.
+Portugal integra a União Europeia.
+Os Estados Unidos são um país da América do Norte.
+O inglês é o idioma oficial dos Estados Unidos.
+O dólar é a moeda dos Estados Unidos.
+O Japão é um país da Ásia.
+Tóquio é a capital do Japão.
+O japonês é o idioma oficial do Japão.
+O iene é a moeda do Japão.
+A China é um país da Ásia.
+Pequim é a capital da China.
+O mandarim é o idioma oficial da China.
+A Rússia é um país da Europa e da Ásia.
+Moscou é a capital da Rússia.
+A Índia é um país da Ásia.
+Nova Délhi é a capital da Índia.
+A Argentina é um país da América do Sul.
+Buenos Aires é a capital da Argentina.
+O Chile é um país da América do Sul.
+Santiago é a capital do Chile.
+O Peru é um país da América do Sul.
+Lima é a capital do Peru.
+A Alemanha é um país da Europa.
+Berlim é a capital da Alemanha.
+O Reino Unido é um país da Europa.
+Londres é a capital do Reino Unido.
+A Espanha é um país da Europa.
+Madri é a capital da Espanha.
+O Canadá é um país da América do Norte.
+Ottawa é a capital do Canadá.
+O México é um país da América do Norte.
+A Austrália é um país da Oceania.
+Camberra é a capital da Austrália.
+O Egito é um país da África.
+O Cairo é a capital do Egito.
+A Nigéria é um país da África.
+Abuja é a capital da Nigéria.

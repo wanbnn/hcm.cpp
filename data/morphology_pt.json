@@ -1,5 +1,44 @@
 {
-  "contractions": ["por|o=pelo","por|a=pela","por|os=pelos","por|as=pelas","de|o=do","de|a=da","de|os=dos","de|as=das"],
-  "ordinals": ["Primeiro","Em seguida","Depois","Por fim"],
-  "agreement": ["mixed_gender=masculine_plural"]
+  "contractions": [
+    "por|o=pelo",
+    "por|a=pela",
+    "por|os=pelos",
+    "por|as=pelas",
+    "de|o=do",
+    "de|a=da",
+    "de|os=dos",
+    "de|as=das"
+  ],
+  "ordinals": [
+    "Primeiro",
+    "Em seguida",
+    "Depois",
+    "Por fim"
+  ],
+  "agreement": [
+    "mixed_gender=masculine_plural"
+  ],
+  "proper_nouns": [
+    "brasil",
+    "frança",
+    "itália",
+    "paris",
+    "roma",
+    "brasília",
+    "américa do sul",
+    "europa",
+    "mercosul",
+    "união europeia",
+    "torre eiffel",
+    "coliseu",
+    "rio sena",
+    "amazônia",
+    "são paulo",
+    "rio de janeiro",
+    "português",
+    "francês",
+    "italiano",
+    "real",
+    "euro"
+  ]
 }

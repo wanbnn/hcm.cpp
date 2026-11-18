@@ -1,0 +1,116 @@
+A matemática estuda números, estruturas, espaços e mudanças.
+A aritmética estuda as operações com números.
+A álgebra usa letras para representar números.
+A geometria estuda formas e espaços.
+O teorema de Pitágoras relaciona os lados de um triângulo retângulo.
+A estatística analisa dados.
+A probabilidade mede a chance de um evento.
+A média é a soma dos valores dividida pela quantidade.
+A mediana é o valor central de um conjunto ordenado.
+A moda é o valor mais frequente.
+Um número primo tem dois divisores.
+O cálculo estuda limites, derivadas e integrais.
+A derivada mede a taxa de variação.
+A integral calcula áreas e acumulados.
+Uma função relaciona entradas e saídas.
+Uma equação tem incógnitas e soluções.
+Um gráfico representa dados visualmente.
+A regra de três resolve proporções.
+A porcentagem representa uma fração de cem.
+A geometria plana estuda figuras bidimensionais.
+A geometria espacial estuda sólidos.
+A trigonometria estuda ângulos e triângulos.
+Um algoritmo pode calcular a média de uma lista.
+A estatística descritiva resume dados.
+A inferência estatística generaliza resultados.
+A amostra representa uma população.
+A variância mede a dispersão dos dados.
+O desvio padrão mede a dispersão em unidades dos dados.
+A correlação mede a relação entre variáveis.
+A computação estuda algoritmos e informação.
+Um algoritmo é uma sequência de passos.
+Um programa é uma sequência de instruções.
+Python é uma linguagem de programação.
+C++ é uma linguagem de programação.
+JavaScript é uma linguagem de programação.
+Um banco de dados armazena dados organizados.
+SQL é uma linguagem de consulta de dados.
+A internet conecta computadores.
+A segurança da informação protege dados.
+A inteligência artificial simula tarefas cognitivas.
+O aprendizado de máquina usa dados para ajustar modelos.
+Um sistema operacional gerencia recursos do computador.
+A memória RAM armazena dados temporários.
+O processador executa instruções.
+O disco armazena dados permanentemente.
+Uma rede neural artificial é inspirada em neurônios.
+Um servidor fornece serviços na rede.
+O HTTP é um protocolo da web.
+Um compilador traduz código para linguagem de máquina.
+Um interpretador executa código diretamente.
+Uma variável armazena um valor.
+Uma função reutiliza um bloco de código.
+Um teste verifica o comportamento do programa.
+O Git controla versões de código.
+Linux é um sistema operacional.
+A física estuda matéria, energia e movimento.
+A química estuda a matéria e suas transformações.
+A biologia estuda os seres vivos.
+A astronomia estuda os astros.
+A Terra é um planeta.
+O Sol é uma estrela.
+A água é formada por hidrogênio e oxigênio.
+A fotossíntese produz glicose e oxigênio.
+A gravidade atrai corpos com massa.
+A energia se conserva.
+A célula é a unidade básica da vida.
+O DNA armazena informação genética.
+A evolução explica a diversidade dos seres vivos.
+A ecologia estuda as relações entre os seres vivos.
+O ecossistema inclui seres vivos e ambiente.
+A cadeia alimentar mostra quem come quem.
+A biodiversidade é a variedade de seres vivos.
+A saúde é um estado de bem-estar físico, mental e social.
+A medicina previne e trata doenças.
+A vacina estimula a imunidade.
+O SUS é o sistema público de saúde do Brasil.
+A higiene ajuda a prevenir doenças.
+O exercício físico melhora a saúde.
+Uma alimentação equilibrada fornece nutrientes.
+A dengue é transmitida por mosquito.
+A malária é transmitida por mosquito.
+A obesidade aumenta o risco de doenças.
+O tabagismo prejudica a saúde.
+O álcool em excesso prejudica a saúde.
+O sono é importante para a saúde.
+A água é essencial para a vida.
+Uma dieta equilibrada inclui frutas e verduras.
+A lavagem das mãos previne infecções.
+Os animais são seres vivos.
+Os mamíferos amamentam seus filhotes.
+As aves têm penas e põem ovos.
+Os peixes vivem na água.
+Os répteis têm escamas.
+Os anfíbios vivem parte da vida na água.
+Os insetos têm seis patas.
+A arara é uma ave.
+O jaguar é um mamífero.
+A baleia é um mamífero.
+O tubarão é um peixe.
+A cobra é um réptil.
+A rã é um anfíbio.
+A abelha é um inseto.
+O Pantanal abriga muitos animais.
+A Amazônia abriga muitos animais.
+Os animais precisam de água e alimento.
+A extinção é o desaparecimento de uma espécie.
+A conservação protege a natureza.
+O animal precisa de habitat.
+A zoologia estuda os animais.
+A botânica estuda as plantas.
+A microbiologia estuda microrganismos.
+O vírus é um microrganismo.
+A bactéria é um microrganismo.
+O fungo é um ser vivo.
+A árvore é uma planta.
+A floresta abriga animais e plantas.

@@ -154,7 +154,9 @@ ContentPlan ContentPlanner::plan(const std::string& input,
     if (has_any(lowered, rules.document_cues)) plan.goal = CommunicativeGoal::ESSAY;
     else if (has_any(lowered, {"como funciona", "funcionamento", "mecanismo", "how does", "how it works"}))
         plan.goal = CommunicativeGoal::MECHANISM;
-    else if (has_any(lowered, {"o que é", "o que e", "defina", "definição", "definicao", "what is"}))
+    else if (has_any(lowered, {"o que é", "o que e", "defina", "definição", "definicao", "what is",
+                               "fale sobre", "me fale sobre", "o que você sabe sobre",
+                               "o que voce sabe sobre", "informações sobre", "informacoes sobre"}))
         plan.goal = CommunicativeGoal::DEFINITION;
     else if (has_any(lowered, {"compare", "comparação", "comparacao", "diferença", "diferenca"}))
         plan.goal = CommunicativeGoal::COMPARISON;

@@ -1164,7 +1164,14 @@ bool ModelBundle::load(const std::string& dir_path, bool use_mmap) {
         if (!fluent_realizer.load(dir_path + "/fluency.bin")) return false;
     } else fluent_realizer = AnalogicalFluencyRealizer{};
     // 5. Realizer
-    {
+    // Very large construction-grammar maps can exceed the load budget. The
+    // natural discourse pipeline does not need them, so load them only when
+    // the archive is within a safe size. A later save rebuilds a smaller one.
+    std::error_code realizer_ec;
+    const auto realizer_size = fs::file_size(dir_path + "/realizer.bin", realizer_ec);
+    if (!realizer_ec && realizer_size > 300ull * 1024 * 1024) {
+        realizer = ConstructionGrammarRealizer{};
+    } else {
         MappedReader r(dir_path + "/realizer.bin", use_mmap);
         if (!r.valid()) return false;
         uint32_t magic = 0, nf = 0;

@@ -6,6 +6,11 @@ prosa natural, mineração de construções e busca.
 
 Data: 2026-11-18.
 
+> Atualização: o artefato mais recente é o **conversa-pt-fluent-v3.2**
+> (128.000 tokens de codebook, ~110 MB de estilo, 1.306 artigos da Wikipédia,
+> 245 livros do Gutenberg e 364 nós/287 arestas no grafo). Ficha:
+> [MODEL_CONVERSA_PT_FLUENT_V32.md](MODEL_CONVERSA_PT_FLUENT_V32.md).
+
 ---
 
 ## 1. Visão geral

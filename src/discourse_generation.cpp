@@ -37,6 +37,8 @@ std::string lang_choice(const std::vector<std::string>& values, const std::strin
 }
 
 std::string article_np(const Entity& entity, const std::string& lang) {
+    if (entity.type == "CITY" || entity.type == "PERSON" || entity.type == "LANDMARK")
+        return entity.canonical;
     const auto lowered = lower(entity.canonical);
     for (const auto* article : {"o ", "a ", "os ", "as ", "um ", "uma ", "the ", "an "})
         if (lowered.starts_with(article)) return entity.canonical;
@@ -66,6 +68,8 @@ std::string prep_article(const std::string& preposition, GramGender gender, Gram
 
 std::string prep_np(const std::string& preposition, const Entity& entity, const std::string& lang,
                     const DiscourseConfig* config) {
+    if (entity.type == "CITY" || entity.type == "PERSON" || entity.type == "LANDMARK")
+        return preposition + " " + entity.canonical;
     // Coordinate compound objects per conjunct: "as bielas e os êmbolos"
     // becomes "pelas bielas e pelos êmbolos", not "pelas bielas e os êmbolos".
     const auto& name = entity.canonical;
@@ -104,6 +108,20 @@ std::string join_list(const std::vector<std::string>& values) {
         out += values[i];
     }
     return out;
+}
+
+std::string capitalize_proper_nouns(std::string text, const DiscourseConfig* config) {
+    if (!config) return text;
+    for (const auto& proper : config->proper_nouns) {
+        if (proper.empty()) continue;
+        const auto needle = lower(proper);
+        size_t at = 0;
+        while ((at = lower(text).find(needle, at)) != std::string::npos) {
+            text.replace(at, proper.size(), proper);
+            at += proper.size();
+        }
+    }
+    return text;
 }
 
 std::string entity_surface(const Entity& entity, ReferenceForm form, const std::string& lang) {
@@ -252,7 +270,10 @@ TextPlan TextPlanner::plan(const DocumentParagraph& paragraph, const LanguageRul
     for (const auto& sentence : paragraph.sentences)
         for (const auto& path : sentence.plan.paths)
             for (const auto& step : path.steps) {
-                const auto key = lower(step.src) + "|" + lower(step.rel) + "|" + lower(step.dst);
+                const auto relation_key = (step.type == RelationType::TAXONOMIC ||
+                                           step.type == RelationType::PROPERTY)
+                    ? std::string("COP") : lower(step.rel);
+                const auto key = lower(step.src) + "|" + relation_key + "|" + lower(step.dst);
                 if (!seen_propositions.insert(key).second) continue;
                 Proposition proposition;
                 proposition.step = step;
@@ -558,7 +579,7 @@ std::string DiscourseGenerator::realize(const DocumentParagraph& paragraph,
         if (next.size() > beam_width) next.resize(beam_width);
         beam = std::move(next);
     }
-    return beam.empty() ? std::string{} : beam.front().text;
+    return beam.empty() ? std::string{} : capitalize_proper_nouns(beam.front().text, config);
 }
 
 } // namespace cognicore

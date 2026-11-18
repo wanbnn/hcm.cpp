@@ -88,6 +88,7 @@ bool DiscourseConfig::load(const std::string& model_dir) {
         const auto eq = item.find('=');
         if (eq != std::string::npos) contractions[item.substr(0, eq)] = item.substr(eq + 1);
     }
+    proper_nouns = array_values(morphology, "proper_nouns");
     entity_types.clear();
     const auto types = read_file(model_dir + "/entity_types.json");
     for (const auto& item : array_values(types, "types")) {
@@ -123,6 +124,42 @@ std::string DiscourseConfig::contraction(const std::string& preposition, GramGen
     const auto key = preposition + "|" + article;
     const auto it = contractions.find(key);
     return it == contractions.end() ? std::string{} : it->second;
+}
+
+std::string DiscourseConfig::display_text(std::string text) const {
+    for (const auto& proper : proper_nouns) {
+        if (proper.empty()) continue;
+        std::string lower_text = text;
+        for (auto& ch : lower_text) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        const auto needle = proper;
+        std::string needle_lower = needle;
+        for (auto& ch : needle_lower) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        std::string replacement;
+        std::istringstream words(needle);
+        std::string word;
+        while (words >> word) {
+            if (!replacement.empty()) replacement += ' ';
+            const auto lower_word = [&]() {
+                std::string copy = word;
+                for (auto& ch : copy) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+                return copy;
+            }();
+            if (lower_word == "de" || lower_word == "do" || lower_word == "da" ||
+                lower_word == "dos" || lower_word == "das" || lower_word == "e") {
+                replacement += lower_word;
+            } else {
+                word[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(word[0])));
+                replacement += word;
+            }
+        }
+        size_t at = 0;
+        while ((at = lower_text.find(needle_lower, at)) != std::string::npos) {
+            text.replace(at, needle.size(), replacement);
+            lower_text.replace(at, needle.size(), needle_lower);
+            at += replacement.size();
+        }
+    }
+    return text;
 }
 
 std::vector<const Construction*> DiscourseConfig::constructions_for(RelationType relation) const {

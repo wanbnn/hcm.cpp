@@ -1162,6 +1162,15 @@ ParsedDocument TextParser::parse_text(const std::string& text) const {
                    triple.object.find(value.object) != std::string::npos;
         });
         if (weaker != doc.triples.end()) {
+            const bool copular =
+                triple.type == RelationType::TAXONOMIC || triple.type == RelationType::PROPERTY ||
+                weaker->type == RelationType::TAXONOMIC || weaker->type == RelationType::PROPERTY;
+            // For copular facts the rule path usually preserves the full PP
+            // ("a capital do Brasil"); do not replace it with a shorter,
+            // truncated dependency object ("capital"). For non-copular facts
+            // the dependency NP is usually cleaner (e.g. "trabalho" vs
+            // "trabalho pela expansão...").
+            if (copular && weaker->object.size() >= triple.object.size()) continue;
             *weaker = triple;
             continue;
         }
