@@ -1,5 +1,6 @@
 #include "core/model_bundle.hpp"
 #include "core/assistant.hpp"
+#include "core/document_planner.hpp"
 #include "core/morphological_realizer.hpp"
 
 #include <algorithm>
@@ -27,6 +28,7 @@ void print_usage() {
               << "  cognicore code --model <dir_modelo> --workspace <dir> --lang cpp|py|js --task <descrição>\n"
               << "  cognicore train-realizer --model <dir_modelo> [--use-gpu]\n"
               << "  cognicore evaluate-fluency --model <dir_modelo> --input <texto> [--out <relatorio.json>]\n"
+              << "  cognicore write --model <dir_modelo> --topic <assunto> [--sections N] [--paragraphs N] [--realizer strict|fluent] [--out <arquivo.md>]\n"
               << "  cognicore chat --model <dir_modelo> [--workspace <dir>] [--realizer strict|fluent] [--lang cpp|py|js] [--debug]\n";
 }
 
@@ -444,6 +446,30 @@ int cmd_evaluate_fluency(int argc, char** argv) {
     return 0;
 }
 
+int cmd_write(int argc, char** argv) {
+    const auto model_path = get_arg(argc, argv, "--model");
+    const auto topic = get_arg(argc, argv, "--topic");
+    if (model_path.empty() || topic.empty()) { print_usage(); return 1; }
+    ModelBundle bundle;
+    if (!bundle.load(model_path, true)) { std::cerr << "Erro ao carregar modelo.\n"; return 1; }
+    MorphologicalRealizer strict;
+    const auto mode = get_arg(argc, argv, "--realizer", "strict");
+    const ISurfaceRealizer* mouth = &strict;
+    if (mode == "fluent" && bundle.fluent_realizer.ready()) mouth = &bundle.fluent_realizer;
+    else if (mode != "strict" && mode != "fluent") { std::cerr << "Realizador inválido.\n"; return 1; }
+    const size_t sections = std::stoul(get_arg(argc, argv, "--sections", "5"));
+    const size_t paragraphs = std::stoul(get_arg(argc, argv, "--paragraphs", "2"));
+    DocumentPlanner planner;
+    const auto plan = planner.plan(topic, bundle.graph, bundle.codebook, bundle.language_rules,
+                                   sections, paragraphs);
+    const auto text = planner.realize(plan, *mouth, bundle.language_rules);
+    if (text.empty()) { std::cerr << "Não há fatos suficientes sobre o tópico.\n"; return 1; }
+    const auto output = get_arg(argc, argv, "--out");
+    if (!output.empty()) { std::ofstream file(output); if (!file) return 1; file << text; }
+    std::cout << text;
+    return 0;
+}
+
 int cmd_chat(int argc, char** argv) {
     const std::string model_dir = get_arg(argc, argv, "--model");
     const bool debug = has_flag(argc, argv, "--debug");
@@ -560,6 +586,7 @@ int run_cli(int argc, char** argv) {
     if (cmd == "code") return cmd_code(argc, argv);
     if (cmd == "train-realizer") return cmd_train_realizer(argc, argv);
     if (cmd == "evaluate-fluency") return cmd_evaluate_fluency(argc, argv);
+    if (cmd == "write") return cmd_write(argc, argv);
     if (cmd == "chat" || cmd == "assistant")           return cmd_chat(argc, argv);
 
     print_usage();

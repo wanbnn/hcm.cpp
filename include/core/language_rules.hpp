@@ -36,6 +36,13 @@ struct LanguageRules {
     std::vector<std::string> math_subtract_cues;
     std::vector<std::string> math_multiply_cues;
     std::vector<std::string> math_divide_cues;
+    std::vector<std::string> section_introduction;
+    std::vector<std::string> section_causes;
+    std::vector<std::string> section_consequences;
+    std::vector<std::string> section_alternatives;
+    std::vector<std::string> section_conclusion;
+    std::vector<std::string> document_connectors;
+    std::vector<std::string> document_title;
 
     bool load(const std::string& path);
     bool save(const std::string& path) const;

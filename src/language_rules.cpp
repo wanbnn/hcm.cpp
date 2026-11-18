@@ -134,6 +134,13 @@ bool LanguageRules::load(const std::string& path) {
     math_subtract_cues = json_string_array(json, "math_subtract_cues");
     math_multiply_cues = json_string_array(json, "math_multiply_cues");
     math_divide_cues = json_string_array(json, "math_divide_cues");
+    section_introduction = json_string_array(json, "section_introduction");
+    section_causes = json_string_array(json, "section_causes");
+    section_consequences = json_string_array(json, "section_consequences");
+    section_alternatives = json_string_array(json, "section_alternatives");
+    section_conclusion = json_string_array(json, "section_conclusion");
+    document_connectors = json_string_array(json, "document_connectors");
+    document_title = json_string_array(json, "document_title");
     math_word_operators.clear();
     for (const auto& value : json_string_array(json, "math_word_operators")) {
         const auto separator = value.find('|');
@@ -172,7 +179,14 @@ bool LanguageRules::save(const std::string& path) const {
     write_array(out, "math_add_cues", math_add_cues);
     write_array(out, "math_subtract_cues", math_subtract_cues);
     write_array(out, "math_multiply_cues", math_multiply_cues);
-    write_array(out, "math_divide_cues", math_divide_cues, true);
+    write_array(out, "math_divide_cues", math_divide_cues);
+    write_array(out, "section_introduction", section_introduction);
+    write_array(out, "section_causes", section_causes);
+    write_array(out, "section_consequences", section_consequences);
+    write_array(out, "section_alternatives", section_alternatives);
+    write_array(out, "section_conclusion", section_conclusion);
+    write_array(out, "document_connectors", document_connectors);
+    write_array(out, "document_title", document_title, true);
     out << "}\n";
     const auto temporary = path + ".tmp";
     std::ofstream file(temporary);

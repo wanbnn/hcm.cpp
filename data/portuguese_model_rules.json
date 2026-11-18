@@ -241,5 +241,29 @@
     "reparte",
     "divided",
     "split"
+  ],
+  "section_introduction": [
+    "Introdução"
+  ],
+  "section_causes": [
+    "Causas"
+  ],
+  "section_consequences": [
+    "Consequências"
+  ],
+  "section_alternatives": [
+    "Alternativas e contrastes"
+  ],
+  "section_conclusion": [
+    "Conclusão"
+  ],
+  "document_connectors": [
+    "Além disso",
+    "Em seguida",
+    "Por outro lado",
+    "Por fim"
+  ],
+  "document_title": [
+    "{topic}: uma explicação causal"
   ]
 }

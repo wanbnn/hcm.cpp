@@ -93,6 +93,7 @@ set(COGNICORE_SOURCES
     src/assistant.cpp
     src/context_memory.cpp
     src/discourse_planner.cpp
+    src/document_planner.cpp
     src/code_ast.cpp
     src/code_synthesizer.cpp
     src/episodic_memory.cpp
@@ -181,6 +182,11 @@ foreach(milestone 10_symbolic 11_assistant)
     target_compile_options(test_marco${milestone} PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)
     add_test(NAME test_marco${milestone} COMMAND test_marco${milestone})
 endforeach()
+
+add_executable(test_marco12_document tests/test_marco12_document.cpp)
+target_link_libraries(test_marco12_document PRIVATE cognicore_lib)
+target_compile_options(test_marco12_document PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)
+add_test(NAME test_marco12_document COMMAND test_marco12_document)
 
 add_executable(test_improvements tests/test_improvements.cpp)
 target_link_libraries(test_improvements PRIVATE cognicore_lib)
