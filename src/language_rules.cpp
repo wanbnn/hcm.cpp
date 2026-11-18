@@ -105,6 +105,29 @@ std::string LanguageRules::requested_language(const std::string& lower_text, con
     return fallback;
 }
 
+std::string LanguageRules::render_template(const std::vector<std::string>& templates,
+                                           const std::string& lang, const std::string& seed,
+                                           const std::vector<std::pair<std::string, std::string>>& slots) const {
+    std::vector<std::string> selected;
+    const auto prefix = lang + "|";
+    for (const auto& tmpl : templates) if (tmpl.starts_with(prefix)) selected.push_back(tmpl.substr(prefix.size()));
+    if (selected.empty()) {
+        for (const auto& tmpl : templates) {
+            const auto bar = tmpl.find('|');
+            selected.push_back(bar == std::string::npos ? tmpl : tmpl.substr(bar + 1));
+        }
+    }
+    if (selected.empty()) return {};
+    (void)seed;
+    std::string value = selected.front();
+    for (const auto& [key, replacement] : slots) {
+        const auto needle = "{" + key + "}";
+        size_t at;
+        while ((at = value.find(needle)) != std::string::npos) value.replace(at, needle.size(), replacement);
+    }
+    return value;
+}
+
 bool LanguageRules::load(const std::string& path) {
     std::ifstream file(path);
     if (!file) return false;
@@ -152,6 +175,34 @@ bool LanguageRules::load(const std::string& path) {
     list_sum_cues = json_string_array(json, "list_sum_cues");
     document_cues = json_string_array(json, "document_cues");
     document_topic_markers = json_string_array(json, "document_topic_markers");
+    social_greet = json_string_array(json, "social_greet");
+    social_thank = json_string_array(json, "social_thank");
+    social_farewell = json_string_array(json, "social_farewell");
+    social_introduce = json_string_array(json, "social_introduce");
+    social_help = json_string_array(json, "social_help");
+    social_smalltalk = json_string_array(json, "social_smalltalk");
+    agree_templates = json_string_array(json, "agree_templates");
+    clarify_templates = json_string_array(json, "clarify_templates");
+    unknown_topic_templates = json_string_array(json, "unknown_topic_templates");
+    empty_episode_templates = json_string_array(json, "empty_episode_templates");
+    resource_unknown = json_string_array(json, "resource_unknown");
+    resource_exceeds = json_string_array(json, "resource_exceeds");
+    resource_within = json_string_array(json, "resource_within");
+    conditional_conditional = json_string_array(json, "conditional_conditional");
+    conditional_temporal = json_string_array(json, "conditional_temporal");
+    conditional_causal = json_string_array(json, "conditional_causal");
+    conditional_concessive = json_string_array(json, "conditional_concessive");
+    conditional_consecutive = json_string_array(json, "conditional_consecutive");
+    causal_explanation_templates = json_string_array(json, "causal_explanation_templates");
+    math_value_templates = json_string_array(json, "math_value_templates");
+    math_equation_templates = json_string_array(json, "math_equation_templates");
+    document_empty_templates = json_string_array(json, "document_empty_templates");
+    api_not_found_templates = json_string_array(json, "api_not_found_templates");
+    connectors_result = json_string_array(json, "connectors_result");
+    connectors_addition = json_string_array(json, "connectors_addition");
+    connectors_contrast = json_string_array(json, "connectors_contrast");
+    connectors_alternative = json_string_array(json, "connectors_alternative");
+    connectors_consequence = json_string_array(json, "connectors_consequence");
     math_word_operators.clear();
     for (const auto& value : json_string_array(json, "math_word_operators")) {
         const auto separator = value.find('|');
@@ -208,7 +259,35 @@ bool LanguageRules::save(const std::string& path) const {
     write_array(out, "centering_pronouns", centering_pronouns);
     write_array(out, "list_sum_cues", list_sum_cues);
     write_array(out, "document_cues", document_cues);
-    write_array(out, "document_topic_markers", document_topic_markers, true);
+    write_array(out, "document_topic_markers", document_topic_markers);
+    write_array(out, "social_greet", social_greet);
+    write_array(out, "social_thank", social_thank);
+    write_array(out, "social_farewell", social_farewell);
+    write_array(out, "social_introduce", social_introduce);
+    write_array(out, "social_help", social_help);
+    write_array(out, "social_smalltalk", social_smalltalk);
+    write_array(out, "agree_templates", agree_templates);
+    write_array(out, "clarify_templates", clarify_templates);
+    write_array(out, "unknown_topic_templates", unknown_topic_templates);
+    write_array(out, "empty_episode_templates", empty_episode_templates);
+    write_array(out, "resource_unknown", resource_unknown);
+    write_array(out, "resource_exceeds", resource_exceeds);
+    write_array(out, "resource_within", resource_within);
+    write_array(out, "conditional_conditional", conditional_conditional);
+    write_array(out, "conditional_temporal", conditional_temporal);
+    write_array(out, "conditional_causal", conditional_causal);
+    write_array(out, "conditional_concessive", conditional_concessive);
+    write_array(out, "conditional_consecutive", conditional_consecutive);
+    write_array(out, "causal_explanation_templates", causal_explanation_templates);
+    write_array(out, "math_value_templates", math_value_templates);
+    write_array(out, "math_equation_templates", math_equation_templates);
+    write_array(out, "document_empty_templates", document_empty_templates);
+    write_array(out, "api_not_found_templates", api_not_found_templates);
+    write_array(out, "connectors_result", connectors_result);
+    write_array(out, "connectors_addition", connectors_addition);
+    write_array(out, "connectors_contrast", connectors_contrast);
+    write_array(out, "connectors_alternative", connectors_alternative);
+    write_array(out, "connectors_consequence", connectors_consequence, true);
     out << "}\n";
     const auto temporary = path + ".tmp";
     std::ofstream file(temporary);

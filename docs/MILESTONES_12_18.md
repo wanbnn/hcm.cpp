@@ -91,6 +91,20 @@ roteia automaticamente:
 python3 benchmarks/run_benchmarks.py --cli build/cognicore --model modelo --out benchmarks/results
 ```
 
+## Sem fallback de resposta
+
+Todo texto de resposta vem de plano/construções do modelo:
+- sociais, concordância, clarificação, tópico desconhecido, recursos e
+  condicionais são templates em `language_rules.json`, com slots;
+- conectivos de discurso também são dados do modelo;
+- código vem de `code_patterns.jsonl` ou do grafo/AST do workspace;
+- matemática vem do motor simbólico e dos templates de resultado do modelo.
+
+Mensagens de erro/recusa (API ausente, workspace sem símbolo, expressão inválida)
+são explícitas e não se apresentam como texto gerado. O teste
+`test_no_fallback` altera templates do modelo e verifica que a saída muda;
+nenhuma resposta é buscada em uma frase pronta no C++.
+
 ## Limites
 
 - O plano de documento é retórico e simbólico; não é criatividade aberta.

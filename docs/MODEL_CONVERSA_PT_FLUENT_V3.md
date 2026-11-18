@@ -88,6 +88,13 @@ O artefato agora carrega também `lexicon.bin`, `coherence.bin`,
 `language_rules.json`. Comandos novos: `write`, `ingest-corpus`, `math` e
 `--realizer lexical`. Detalhes em [Marcos 12–18](MILESTONES_12_18.md).
 
+## Sem fallback de resposta
+
+Respostas sociais, concordância, clarificação, recursos, condicionais,
+conectivos e resultados matemáticos são templates do modelo em
+`language_rules.json`. Código vem de construções em `code_patterns.jsonl` ou do
+grafo/AST. Erros e recusas são explícitos. Teste: `test_no_fallback`.
+
 ## Limites
 
 - O parser de dependências é interno e baseado em regras; não é UDPipe nem um

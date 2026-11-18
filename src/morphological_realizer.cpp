@@ -42,6 +42,8 @@ std::string to_infinitive_pt(const std::string& verb_or_lemma) {
 
 } // namespace
 
+MorphologicalRealizer::MorphologicalRealizer() { rules_.load_default(); }
+
 std::string MorphologicalRealizer::definite_article(GramGender gender,
                                                     GramNumber number,
                                                     const std::string& lang) {
@@ -240,39 +242,27 @@ std::string MorphologicalRealizer::realize_clause(const CausalStep& step,
 
 std::string MorphologicalRealizer::realize(const SemanticPlan& plan) const {
     if (plan.quoted_statement) return *plan.quoted_statement;
-    if (plan.resource) return realize_resource_assessment(plan);
-    if (!plan.conditional_conclusions.empty()) return realize_conditional_conclusions(plan);
+    if (plan.resource) return realize_resource_assessment(plan, rules_);
+    if (!plan.conditional_conclusions.empty()) return realize_conditional_conclusions(plan, rules_);
     const std::string lang = plan.language.empty() ? "pt" : plan.language;
 
-    const auto social = social_constructions(plan);
+    const auto social = social_constructions(plan, rules_);
     if (!social.empty()) return social.front();
-    if (plan.intent == DialogIntent::GREET) {
-        return (lang == "en")
-            ? "Hello! I am ready to reason and learn new concepts with you."
-            : "Olá! Estou pronto para raciocinar e aprender novos conceitos com você.";
-    }
-    if (plan.intent == DialogIntent::AGREE) {
-        return (lang == "en")
-            ? "Yes, that is consistent with the causal relations stored in memory."
-            : "Sim, isso está coerente com as relações causais registradas na memória.";
-    }
+    if (plan.intent == DialogIntent::GREET)
+        return rules_.render_template(rules_.social_greet, lang, "greet");
+    if (plan.intent == DialogIntent::AGREE)
+        return rules_.render_template(rules_.agree_templates, lang, "agree");
     if (plan.intent == DialogIntent::ASK_CLARIFY || plan.paths.empty()) {
-        if (plan.query_concepts.empty()) {
-            return (lang == "en")
-                ? "Could you clarify the concepts involved so I can infer the relation?"
-                : "Poderia detalhar os conceitos envolvidos para que eu possa inferir a relação?";
-        }
-        return (lang == "en")
-            ? ("I do not have enough connections about " + plan.query_concepts[0] + " yet.")
-            : ("Ainda não tenho conexões suficientes sobre " + plan.query_concepts[0] + ".");
+        if (plan.query_concepts.empty())
+            return rules_.render_template(rules_.clarify_templates, lang, "clarify");
+        return rules_.render_template(rules_.unknown_topic_templates, lang, plan.query_concepts.front(),
+                                      {{"concept", plan.query_concepts.front()}});
     }
 
     const auto& steps = plan.paths[0].steps;
     if (steps.empty()) return "";
 
-    // Discourse planner + Anaphora substitution across multi-hop sentences
-    static const char* pt_connectors[] = {"", "Como resultado, ", "Por conseguinte, ", "Além disso, "};
-    static const char* en_connectors[] = {"", "As a result, ", "Consequently, ", "Furthermore, "};
+    // Discourse connectors are model data (language_rules.json).
 
     std::string result;
     std::string prev_subj;
@@ -314,14 +304,17 @@ std::string MorphologicalRealizer::realize(const SemanticPlan& plan) const {
         std::string conn;
         if (i > 0) {
             if (st.type == RelationType::INHIBITS || st.negated) {
-                conn = (lang == "en") ? "However, " : "Entretanto, ";
+                conn = rules_.render_template(rules_.connectors_contrast, lang,
+                                              std::to_string(i) + st.src);
             } else if (st.src == prev_subj) {
-                conn = lang == "en" ? "Furthermore, " : "Além disso, ";
+                conn = rules_.render_template(rules_.connectors_addition, lang,
+                                              std::to_string(i) + st.src);
             } else if (st.src != prev_obj) {
-                conn = lang == "en" ? "Also, " : "Também, ";
+                conn = rules_.render_template(rules_.connectors_addition, lang,
+                                              std::to_string(i) + st.dst);
             } else {
-                conn = (lang == "en") ? en_connectors[std::min<size_t>(i, 3)]
-                                      : pt_connectors[std::min<size_t>(i, 3)];
+                conn = rules_.render_template(rules_.connectors_result, lang,
+                                              std::to_string(i) + st.src + st.dst);
             }
         }
 
@@ -341,15 +334,16 @@ std::string MorphologicalRealizer::realize(const SemanticPlan& plan) const {
         secondary.intent = plan.intent;
         secondary.language = lang;
         secondary.paths.push_back(plan.alternatives[a]);
-        auto text = MorphologicalRealizer{}.realize(secondary);
+        auto text = MorphologicalRealizer(rules_).realize(secondary);
         if (text.empty()) continue;
         if (static_cast<unsigned char>(text[0]) < 128)
             text[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(text[0])));
         const bool contrast = a < plan.rhetorical_roles.size() &&
             plan.rhetorical_roles[a + 1] == static_cast<uint8_t>(4);
         if (!result.empty()) result += " ";
-        result += (lang == "en" ? (contrast ? "However, " : "Alternatively, ")
-                                : (contrast ? "Porém, " : "Alternativamente, ")) + text;
+        result += rules_.render_template(
+            contrast ? rules_.connectors_contrast : rules_.connectors_alternative,
+            lang, std::to_string(a) + text) + text;
     }
 
     return result;

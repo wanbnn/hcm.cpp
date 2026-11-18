@@ -133,13 +133,19 @@ AssistantReply AssistantSession::respond(const std::string& input, CodeLanguage 
         reply.route != AssistantRoute::CODE_QUERY_OR_EXPLAIN) {
         const SymbolicMath symbolic(model_.language_rules);
         if (const auto equation = symbolic.solve(input)) {
-            math_answer = "Resultado: " + equation->variable + " = " + equation->value.to_string() + ".";
+            math_answer = rules.render_template(rules.math_equation_templates, rules.language,
+                                                equation->variable, {{"variable", equation->variable},
+                                                                     {"value", equation->value.to_string()}});
             reply.trace.decision_override = "MATH: equação linear simbólica";
         } else if (const auto evaluated = symbolic.evaluate(input)) {
-            math_answer = "Resultado: " + evaluated->value.to_string() + ".";
+            math_answer = rules.render_template(rules.math_value_templates, rules.language,
+                                                evaluated->value.to_string(),
+                                                {{"value", evaluated->value.to_string()}});
             reply.trace.decision_override = "MATH: aritmética racional simbólica";
         } else if (const auto solved = MathSolver{}.solve(input)) {
-            math_answer = "Resultado: " + std::to_string(solved->value) + ".";
+            math_answer = rules.render_template(rules.math_value_templates, rules.language,
+                                                std::to_string(solved->value),
+                                                {{"value", std::to_string(solved->value)}});
             reply.trace.decision_override = "MATH: aritmética inteira simbólica";
         }
     }
@@ -155,11 +161,12 @@ AssistantReply AssistantSession::respond(const std::string& input, CodeLanguage 
         DocumentPlanner planner;
         const auto plan = planner.plan(topic.empty() ? lower : topic, model_.graph,
                                        model_.codebook, rules, 5, 2);
-        MorphologicalRealizer fallback;
+        MorphologicalRealizer fallback(rules);
         const auto& surface = mouth ? *mouth : static_cast<const ISurfaceRealizer&>(fallback);
         reply.text = planner.realize(plan, surface, rules);
         if (reply.text.empty())
-            reply.text = "Ainda não tenho fatos suficientes sobre esse tópico para gerar um documento.";
+            reply.text = rules.render_template(rules.document_empty_templates, rules.language, topic,
+                                               {{"topic", topic}});
         reply.trace.decision_override = "DOCUMENT: " + plan.rationale;
     } else if (reply.route == AssistantRoute::CODE_GENERATE_OR_PATCH) {
         const auto requested_language = detect_requested_language(TextParser::utf8_tolower(effective_input), language, model_.language_rules);
@@ -197,7 +204,9 @@ AssistantReply AssistantSession::respond(const std::string& input, CodeLanguage 
                 if (edge.src == sym.id && edge.type == CodeEdgeType::CALLS) out << " " << model_.code_graph.symbols()[edge.dst].name;
             out << "\n";
         }
-        reply.text = out.str().empty() ? "Não encontrei esse símbolo no índice do workspace." : out.str();
+        reply.text = out.str().empty()
+            ? rules.render_template(rules.api_not_found_templates, rules.language, input, {{"symbol", input}})
+            : out.str();
     } else {
         reply.trace = model_.infer_and_respond(input, reply.route == AssistantRoute::FACT_UPDATE, mouth);
         reply.text = reply.trace.response;

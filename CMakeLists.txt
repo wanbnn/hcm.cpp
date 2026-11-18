@@ -223,6 +223,11 @@ target_link_libraries(test_marco18_chat_unified PRIVATE cognicore_lib)
 target_compile_options(test_marco18_chat_unified PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)
 add_test(NAME test_marco18_chat_unified COMMAND test_marco18_chat_unified)
 
+add_executable(test_no_fallback tests/test_no_fallback.cpp)
+target_link_libraries(test_no_fallback PRIVATE cognicore_lib)
+target_compile_options(test_no_fallback PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)
+add_test(NAME test_no_fallback COMMAND test_no_fallback)
+
 add_executable(test_improvements tests/test_improvements.cpp)
 target_link_libraries(test_improvements PRIVATE cognicore_lib)
 target_compile_options(test_improvements PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)

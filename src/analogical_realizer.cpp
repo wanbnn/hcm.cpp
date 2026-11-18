@@ -178,6 +178,7 @@ struct AnalogicalFluencyRealizer::Mapping {
     ~Mapping() { if (data != MAP_FAILED) ::munmap(data, size); if (fd >= 0) ::close(fd); }
 };
 AnalogicalFluencyRealizer::AnalogicalFluencyRealizer() : index_(index_config()) {
+    rules_.load_default();
     // Structural floor. Additional productions are learned only from observed markers.
     for (bool en : {false, true}) {
         PhraseFragment clause; clause.english = en; clause.relation = 255;
@@ -344,7 +345,7 @@ bool AnalogicalFluencyRealizer::preserves_plan(const FluencyCandidate& c, const 
 }
 FluencyDerivation AnalogicalFluencyRealizer::derive(const SemanticPlan& plan) const {
     FluencyDerivation result;
-    MorphologicalRealizer morphology;
+    MorphologicalRealizer morphology(rules_);
     if (!trained_ || plan.resource || plan.quoted_statement || !plan.conditional_conclusions.empty() || plan.paths.empty() || plan.paths.front().steps.empty() ||
         plan.intent == DialogIntent::AGREE || plan.intent == DialogIntent::GREET || plan.intent == DialogIntent::ASK_CLARIFY) {
         FluencyCandidate c; c.text = morphology.realize(plan); result.candidates.push_back(std::move(c)); return result;

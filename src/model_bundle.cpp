@@ -595,7 +595,7 @@ ModelBundle::InferenceTrace ModelBundle::infer_and_respond(const std::string& us
     }
     if (lower_input.find("o que eu disse") != std::string::npos || lower_input.find("what did i say") != std::string::npos) {
         plan = SemanticPlan{};
-        plan.quoted_statement = episodes.empty() ? "Ainda não há episódios anteriores nesta sessão." : episodes.back().first;
+        plan.quoted_statement = episodes.empty() ? language_rules.render_template(language_rules.empty_episode_templates, plan.language, "quote") : episodes.back().first;
         trace.decision_override = "consulta literal ao diário; sem inferência associativa";
         for (auto it = episodic_memory.facts().rbegin(); it != episodic_memory.facts().rend(); ++it) {
             if (it->source != *plan.quoted_statement) continue;

@@ -1,4 +1,5 @@
 #pragma once
+#include "core/language_rules.hpp"
 #include "core/realizer.hpp"
 #include "core/sdm.hpp"
 #include <array>
@@ -69,6 +70,7 @@ struct FluencyDerivation {
 class AnalogicalFluencyRealizer : public ISurfaceRealizer {
 public:
     AnalogicalFluencyRealizer();
+    void set_rules(const LanguageRules& rules) { rules_ = rules; }
     void observe(const std::string& source, const TextParser& parser, const ParsedDocument* parsed = nullptr);
     void train(bool use_gpu = false);
     std::string realize(const SemanticPlan& plan) const override;
@@ -95,5 +97,6 @@ private:
     KanervaSDM index_;
     SparseTsetlinModel style_;
     bool trained_ = false;
+    LanguageRules rules_;
 };
 } // namespace cognicore

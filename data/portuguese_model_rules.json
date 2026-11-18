@@ -354,5 +354,137 @@
     "do tema",
     "acerca de",
     "on the topic of"
+  ],
+  "social_greet": [
+    "pt|Olá! Em que posso ajudar?",
+    "pt|Oi! Sobre o que você quer conversar?",
+    "en|Hello! How can I help?",
+    "en|Hi! What would you like to talk about?"
+  ],
+  "social_thank": [
+    "pt|De nada! Podemos continuar quando quiser.",
+    "pt|Por nada! Quer conversar sobre mais alguma coisa?",
+    "en|You're welcome! We can continue whenever you like.",
+    "en|Glad to help! What else would you like to discuss?"
+  ],
+  "social_farewell": [
+    "pt|Até logo! Podemos retomar a conversa depois.",
+    "pt|Até mais! Quando quiser, podemos continuar.",
+    "en|See you! We can pick this up another time.",
+    "en|Goodbye! We can continue whenever you want."
+  ],
+  "social_introduce": [
+    "pt|Sou o CogniCore. Uso memória associativa e regras simbólicas.",
+    "pt|Meu nome é CogniCore. Posso relacionar fatos e aprender com a nossa conversa.",
+    "en|I am CogniCore. I use associative memory and symbolic rules.",
+    "en|My name is CogniCore. I can relate facts and learn from our conversation."
+  ],
+  "social_help": [
+    "pt|Posso conversar e relacionar os fatos que conheço. Diga em que você precisa de ajuda.",
+    "pt|Posso aprender uma informação que você me ensinar. Qual assunto você quer explorar?",
+    "en|I can help you explore what is in memory. Tell me what you need.",
+    "en|I can learn information you teach me. What topic would you like to explore?"
+  ],
+  "social_smalltalk": [
+    "pt|Estou por aqui, pronto para conversar. Como você está?",
+    "pt|Podemos conversar com calma. O que você gostaria de compartilhar?",
+    "en|I am here and ready to talk. How are you?",
+    "en|We can talk calmly. What would you like to share?"
+  ],
+  "agree_templates": [
+    "pt|Sim, isso está coerente com as relações causais registradas na memória.",
+    "en|Yes, that is consistent with the causal relations stored in memory."
+  ],
+  "clarify_templates": [
+    "pt|Poderia detalhar os conceitos envolvidos para que eu possa inferir a relação?",
+    "en|Could you clarify the concepts involved so I can infer the relation?"
+  ],
+  "unknown_topic_templates": [
+    "pt|Ainda não tenho conexões suficientes sobre {concept}.",
+    "en|I do not have enough connections about {concept} yet."
+  ],
+  "empty_episode_templates": [
+    "pt|Ainda não há episódios anteriores nesta sessão.",
+    "en|There are no previous episodes in this session yet."
+  ],
+  "resource_unknown": [
+    "pt|Para {entity}, você informou {capacity} de RAM. Ainda preciso saber quanta memória a operação exige. Se ela ultrapassar esse limite, a RAM será insuficiente; a demanda não foi informada.",
+    "en|For {entity}, you reported {capacity} of RAM. I still need to know how much memory the operation requires."
+  ],
+  "resource_exceeds": [
+    "pt|Para {entity}, você informou {capacity} de RAM. Uma alocação de {demand} excede essa capacidade. Não há RAM suficiente para manter essa alocação inteira ao mesmo tempo.",
+    "en|For {entity}, you reported {capacity} of RAM. An allocation of {demand} exceeds that capacity."
+  ],
+  "resource_within": [
+    "pt|Para {entity}, você informou {capacity} de RAM. Uma alocação de {demand} não excede essa capacidade total. Isso não garante memória livre: o sistema e outros processos também consomem RAM.",
+    "en|For {entity}, you reported {capacity} of RAM. An allocation of {demand} does not exceed that total capacity."
+  ],
+  "conditional_conditional": [
+    "pt|Se {antecedent}, então {consequent}.",
+    "en|If {antecedent}, then {consequent}."
+  ],
+  "conditional_temporal": [
+    "pt|Quando {antecedent}, {consequent}.",
+    "en|When {antecedent}, {consequent}."
+  ],
+  "conditional_causal": [
+    "pt|Como {antecedent}, {consequent}.",
+    "en|Because {antecedent}, {consequent}."
+  ],
+  "conditional_concessive": [
+    "pt|Embora {antecedent}, {consequent}.",
+    "en|Although {antecedent}, {consequent}."
+  ],
+  "conditional_consecutive": [
+    "pt|{antecedent}, portanto, {consequent}.",
+    "en|{antecedent}, therefore, {consequent}."
+  ],
+  "causal_explanation_templates": [
+    "pt|Isso ocorre porque {clause}.",
+    "en|This happens because {clause}."
+  ],
+  "math_value_templates": [
+    "pt|Resultado: {value}.",
+    "en|Result: {value}."
+  ],
+  "math_equation_templates": [
+    "pt|Resultado: {variable} = {value}.",
+    "en|Result: {variable} = {value}."
+  ],
+  "document_empty_templates": [
+    "pt|Ainda não tenho fatos suficientes sobre {topic} para gerar um documento.",
+    "en|I do not have enough facts about {topic} to generate a document."
+  ],
+  "api_not_found_templates": [
+    "pt|Não encontrei o símbolo {symbol} no índice do workspace.",
+    "en|I did not find the symbol {symbol} in the workspace index."
+  ],
+  "connectors_result": [
+    "pt|Como resultado, ",
+    "pt|Por conseguinte, ",
+    "en|As a result, ",
+    "en|Consequently, "
+  ],
+  "connectors_addition": [
+    "pt|Além disso, ",
+    "pt|Também, ",
+    "en|Furthermore, ",
+    "en|Also, "
+  ],
+  "connectors_contrast": [
+    "pt|Entretanto, ",
+    "pt|Porém, ",
+    "en|However, "
+  ],
+  "connectors_alternative": [
+    "pt|Alternativamente, ",
+    "en|Alternatively, "
+  ],
+  "connectors_consequence": [
+    "pt|; portanto, ",
+    "pt|; por isso, ",
+    "pt|; assim, ",
+    "en|; therefore, ",
+    "en|; as a result, "
   ]
 }

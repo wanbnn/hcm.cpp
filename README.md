@@ -182,7 +182,9 @@ python3 benchmarks/run_benchmarks.py \
 ```
 
 O relatório inclui respostas, latências, calibração PPM, categorias de geração
-longa e pico de RSS. As planilhas de avaliação humana (fluência e texto longo)
+longa e pico de RSS. Respostas sociais, recursos e condicionais também são
+construções em `language_rules.json`; não há frase de resposta hardcoded no
+caminho de inferência. Erros/recusas são explícitos. As planilhas de avaliação humana (fluência e texto longo)
 são geradas vazias; notas só entram quando avaliadores reais devolvem o arquivo
 preenchido.
 

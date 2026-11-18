@@ -1,14 +1,14 @@
 {
   "architecture": "symbolic VSA + Kanerva SDM + Tsetlin + causal graph + DOP; no neural weights",
   "source_model": "/run/media/wanderson/DADOS_1TB/cognicore/models/conversa-pt-fluent-v3",
-  "benchmark_model": "/home/wanderson/Projetos/tessel/benchmarks/results/cognicore_bench__lmn4gnw/bench_model",
+  "benchmark_model": "/home/wanderson/Projetos/tessel/benchmarks/results/cognicore_bench_29v6nmhy/bench_model",
   "categories": {
     "science": {
       "category": "science_mcq_gpqa_style",
       "total": 5,
       "correct": 5,
       "accuracy": 1.0,
-      "latency_ms": 6099.17,
+      "latency_ms": 5563.86,
       "details": [
         {
           "prompt": "O que o atrito gera?",
@@ -58,7 +58,7 @@
       "total": 3,
       "correct": 3,
       "accuracy": 1.0,
-      "latency_ms": 2566.4,
+      "latency_ms": 11559.37,
       "details": [
         {
           "prompt": "Se todos os motores aquecem, o que acontece?",
@@ -92,7 +92,7 @@
       "total": 5,
       "correct": 5,
       "accuracy": 1.0,
-      "latency_ms": 9194.88,
+      "latency_ms": 3270.34,
       "details": [
         {
           "prompt": "Quanto é 12 + 8?",
@@ -141,7 +141,7 @@
       "total": 2,
       "correct": 2,
       "accuracy": 1.0,
-      "latency_ms": 1537.71,
+      "latency_ms": 961.21,
       "details": [
         {
           "task": "identity e count",
@@ -162,7 +162,7 @@
       "total": 1,
       "correct": 1,
       "accuracy": 1.0,
-      "latency_ms": 489.54,
+      "latency_ms": 471.17,
       "details": [
         {
           "task": "patch process",
@@ -177,7 +177,7 @@
       "total": 3,
       "correct": 3,
       "accuracy": 1.0,
-      "latency_ms": 5298.7,
+      "latency_ms": 6414.82,
       "details": [
         {
           "prompt": "Por que o atrito causa gelo?",
@@ -222,7 +222,7 @@
       "total": 3,
       "correct": 3,
       "accuracy": 1.0,
-      "latency_ms": 2519.51,
+      "latency_ms": 2578.81,
       "details": [
         {
           "topic": "calor",
@@ -276,7 +276,7 @@
     }
   },
   "calibration": {
-    "model": "/home/wanderson/Projetos/tessel/benchmarks/results/cognicore_bench__lmn4gnw/bench_model",
+    "model": "/home/wanderson/Projetos/tessel/benchmarks/results/cognicore_bench_29v6nmhy/bench_model",
     "input": "/home/wanderson/Projetos/tessel/benchmarks/data/heldout_pt.txt",
     "estimator": "PPM-C ordem 5 sem exclusão (calibração de relatório)",
     "bits_per_byte": 2.2014343,
@@ -287,7 +287,7 @@
     "trained": true,
     "mapped": true
   },
-  "peak_child_rss_kb": 733116,
+  "peak_child_rss_kb": 732864,
   "train_log_tail": [
     "Realizador DOP/PPM/Tsetlin treinado: 1136 fragmentos, 80000 contextos PPM."
   ],

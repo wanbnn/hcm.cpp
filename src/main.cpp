@@ -590,7 +590,7 @@ int cmd_write(int argc, char** argv) {
     if (model_path.empty() || topic.empty()) { print_usage(); return 1; }
     ModelBundle bundle;
     if (!bundle.load(model_path, true)) { std::cerr << "Erro ao carregar modelo.\n"; return 1; }
-    MorphologicalRealizer strict;
+    MorphologicalRealizer strict(bundle.language_rules);
     LexicalizedGrammarRealizer lexical(bundle.language_rules);
     const auto mode = get_arg(argc, argv, "--realizer", "strict");
     const ISurfaceRealizer* mouth = &strict;
@@ -659,7 +659,7 @@ int cmd_chat(int argc, char** argv) {
         fs::create_directories(session_dir);
     }
     const auto realizer = get_arg(argc, argv, "--realizer", "fluent");
-    MorphologicalRealizer morphology;
+    MorphologicalRealizer morphology(bundle.language_rules);
     LexicalizedGrammarRealizer lexical(bundle.language_rules);
     const ISurfaceRealizer* mouth = nullptr;
     if (realizer == "strict") mouth = &morphology;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/causal_graph.hpp"
+#include "core/language_rules.hpp"
 #include "core/text_parser.hpp"
 #include "core/tsetlin.hpp"
 
@@ -39,12 +40,12 @@ struct SemanticPlan {
 };
 
 /// Symbolic, model-independent representation for auditing and structural verification.
-std::string realize_conditional_conclusions(const SemanticPlan& plan);
-std::string realize_resource_assessment(const SemanticPlan& plan);
+std::string realize_conditional_conclusions(const SemanticPlan& plan, const LanguageRules& rules);
+std::string realize_resource_assessment(const SemanticPlan& plan, const LanguageRules& rules);
 std::string serialize_semantic_plan(const SemanticPlan& plan);
 
 /// Finite social constructions: combine lexical blocks, never retrieve corpus replies.
-std::vector<std::string> social_constructions(const SemanticPlan& plan);
+std::vector<std::string> social_constructions(const SemanticPlan& plan, const LanguageRules& rules);
 
 class ISurfaceRealizer {
 public:
@@ -55,6 +56,8 @@ public:
 class ConstructionGrammarRealizer : public ISurfaceRealizer {
 public:
     ConstructionGrammarRealizer();
+    explicit ConstructionGrammarRealizer(const LanguageRules& rules);
+    void set_rules(const LanguageRules& rules) { rules_ = rules; }
 
     void add_frame(const ConstructionFrame& frame);
     void observe_sentence_tokens(const std::vector<std::string>& tokens);
@@ -93,6 +96,7 @@ private:
     std::unordered_map<std::string, uint32_t> bigrams_;
     std::unordered_map<std::string, uint32_t> trigrams_;
     uint64_t total_tokens_ = 0;
+    LanguageRules rules_;
 };
 
 } // namespace cognicore
