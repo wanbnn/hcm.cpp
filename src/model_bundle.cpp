@@ -1207,6 +1207,7 @@ size_t ModelBundle::disk_size_bytes(const std::string& dir_path) {
 size_t ModelBundle::estimated_ram_bytes() const noexcept {
     size_t total = codebook.size() * (2 * sizeof(HyperVector) + 32);
     total += sdm.memory_bytes() + episodic_memory.memory_bytes() + context_memory.memory_bytes();
+    total += lexicon.memory_bytes() + coherence.memory_bytes();
     total += has_sparse_tsetlin ? sparse_tsetlin.memory_bytes() : tsetlin.memory_bytes();
     if (has_context_policy) total += context_policy.memory_bytes();
     total += graph.memory_bytes();

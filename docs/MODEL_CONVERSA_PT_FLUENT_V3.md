@@ -42,8 +42,8 @@ previsão para outros corpora.
 
 - 16.010 tokens no codebook VSA; 19 nós e 12 arestas no grafo factual.
 - 1.136 produções estruturais; 80.000 contextos PPM; 47 frames; 804.232 n-gramas.
-- Disco: ~43 MB. RAM estimada: ~66 MB (sem contar mmap do grafo/fluência e RSS
-  de arquivos mapeados; o pico medido no benchmark foi ~626 MB no processo CLI).
+- Disco: ~67 MB. RAM estimada: ~146 MB (sem contar mmap do grafo/fluência e RSS
+  de arquivos mapeados; o pico medido no benchmark foi ~733 MB no processo CLI).
 - Intenção reservada: 769/1.060 (72,55%); probes sintéticos: 18/18 (100%).
   Os rótulos são parcialmente heurísticos e não constituem avaliação humana.
 - Calibração PPM na sonda de `benchmarks/data/heldout_pt.txt`:

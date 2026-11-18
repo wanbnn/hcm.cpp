@@ -19,12 +19,12 @@ Additional metrics:
 
 - PPM-C calibration probe: 2.201 bits/byte, perplexity 4.599 (small
   hand-written probe, not a representative held-out corpus).
-- Peak child RSS measured by the runner: ~634 MB for the CLI process.
+- Peak child RSS measured by the runner: ~733 MB for the CLI process.
 - Detailed answers, latencies and code are in `benchmark_report.json`.
 - `fluency_rating_sheet.jsonl` and `long_form_rating_sheet.jsonl` are empty by design. Human ratings were not
   fabricated; fill it with real raters and use
   `scripts/evaluate_fluency_human.py score`.
 
 The benchmark model is a temporary copy of v3 with
-`benchmarks/data/science_facts.txt` ingested. The source model directory is not
+`benchmarks/data/science_facts.txt` and `benchmarks/data/long_form_facts.txt` ingested. The source model directory is not
 modified by the runner.
