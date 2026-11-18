@@ -193,3 +193,7 @@ Detalhes da execução simbólica, memória episódica, regras condicionais e li
 Implementação e limites do novo Marco 10: [fluência analógica](docs/ANALOGICAL_FLUENCY.md).
 Marcos 12–18 (documento, léxico, gramática lexicalizada, coerência, matemática,
 código testado e ingestão massiva): [detalhes](docs/MILESTONES_12_18.md).
+
+Guia completo para treinar um modelo do zero (build, datasets, indexação, SFT,
+alignment, avaliação, fine-tuning, inferência e publicação):
+[treinar do zero](docs/TRAIN_FROM_SCRATCH.md).
