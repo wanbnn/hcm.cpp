@@ -212,7 +212,16 @@ CodeSynthesisResult CodeSynthesizer::synthesize(const std::string& task_descript
         // No workspace API matched. Use a code construction from the model
         // library, binding typed slots and validating the resulting AST.
         const auto language = std::string(code_lang_to_string(lang));
-        if (const auto* pattern = patterns_.match(lower_task, language)) {
+        const bool arithmetic_task = std::any_of(lower_task.begin(), lower_task.end(),
+            [](unsigned char c) { return std::isdigit(c) || c == '+' || c == '-' || c == '*' || c == '/'; });
+        const CodeConstruction* pattern = nullptr;
+        if (arithmetic_task) {
+            const auto arithmetic_id = language + "_arithmetic_script";
+            for (const auto& candidate : patterns_.patterns())
+                if (candidate.id == arithmetic_id) { pattern = &candidate; break; }
+        }
+        if (!pattern) pattern = patterns_.match(lower_task, language);
+        if (pattern) {
             auto code = pattern->template_code;
             auto replace_all = [](std::string& value, const std::string& from, const std::string& to) {
                 size_t at;

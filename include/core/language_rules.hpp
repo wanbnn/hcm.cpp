@@ -45,6 +45,7 @@ struct LanguageRules {
     std::vector<std::string> part_of_templates;
     std::vector<std::string> sequence_ordinals;
     std::vector<std::string> document_title;
+    std::vector<std::string> verb_prepositions;
     std::vector<std::string> verb_synonyms;
     std::vector<std::string> noun_synonyms;
     std::vector<std::string> relative_patterns;
@@ -96,6 +97,7 @@ struct LanguageRules {
     bool starts_with_any(const std::string& text, const std::vector<std::string>& cues) const;
     bool is_instruction_or_correction(const std::string& lower_text) const;
     bool is_code_followup(const std::string& lower_text) const;
+    std::string verb_preposition(const std::string& lemma) const;
     bool is_hypothetical(const std::string& lower_text) const;
     bool is_leading_rule(const std::string& lower_text) const;
     /// Returns "python", "javascript", "typescript", "cpp" or fallback.

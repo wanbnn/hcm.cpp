@@ -397,6 +397,16 @@ ModelBundle::InferenceTrace ModelBundle::infer_and_respond(const std::string& us
         trace.intent = DialogIntent::AGREE;
     } else {
         trace.intent = classify_dialogue(user_text);
+        // The context policy can over-predict GREET. Only a short turn that
+        // actually starts with a greeting is social; content turns are facts.
+        if (trace.intent == DialogIntent::GREET) {
+            const auto lower = TextParser::utf8_tolower(user_text);
+            const bool real_greeting = lower.starts_with("olá") || lower == "oi" ||
+                lower.starts_with("oi,") || lower.starts_with("bom dia") ||
+                lower.starts_with("boa tarde") || lower.starts_with("boa noite") ||
+                lower.starts_with("hello") || lower.starts_with("hi");
+            if (!real_greeting) trace.intent = DialogIntent::ANSWER_FACT;
+        }
     }
 
     const auto features = encode_dialogue_features(user_text);

@@ -22,7 +22,7 @@ Transformer, peso neural ou backpropagation.
 | PDFs | 1 | 1 |
 | Vocabulário VSA | 48.008 | **128.006** |
 | Contexto | stride 2 | stride 2 |
-| Grafo factual | 60/43 | **364 nós / 287 arestas** |
+| Grafo factual | 60/43 | **348 nós / 278 arestas** |
 | Léxico | 353.317 | 447.341 entradas |
 | Coerência KN | 5,97M trigramas | 10,19M trigramas |
 | Disco | ~544 MB | ~553 MB |
@@ -86,10 +86,10 @@ Resultado:
 
 - 31 triplas de motor;
 - 122 triplas de países;
-- 122 triplas de domínio;
-- grafo final: **364 nós / 287 arestas**;
+- 119 triplas de domínio;
+- grafo final: **348 nós / 278 arestas**;
 - codebook e Tsetlin preservados;
-- SDM com 1.543/2.048 slots.
+- SDM com 1.512/2.048 slots.
 
 ## Métricas
 
@@ -111,7 +111,7 @@ para ampliar vocabulário, contexto, léxico e conhecimento.
 
 ## Código
 
-`code_patterns.jsonl` agora tem 26 construções. Exemplos que funcionam sem
+`code_patterns.jsonl` agora tem 27 construções. Exemplos que funcionam sem
 workspace:
 
 ```text

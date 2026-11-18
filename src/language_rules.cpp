@@ -85,6 +85,14 @@ bool LanguageRules::is_instruction_or_correction(const std::string& lower_text) 
            starts_with_any(lower_text, correction_markers);
 }
 
+std::string LanguageRules::verb_preposition(const std::string& lemma) const {
+    for (const auto& item : verb_prepositions) {
+        const auto eq = item.find('=');
+        if (eq != std::string::npos && item.substr(0, eq) == lemma) return item.substr(eq + 1);
+    }
+    return {};
+}
+
 bool LanguageRules::is_code_followup(const std::string& lower_text) const {
     return contains_any(lower_text, followup_markers);
 }
@@ -166,6 +174,7 @@ bool LanguageRules::load(const std::string& path) {
     part_of_templates = json_string_array(json, "part_of_templates");
     sequence_ordinals = json_string_array(json, "sequence_ordinals");
     document_title = json_string_array(json, "document_title");
+    verb_prepositions = json_string_array(json, "verb_prepositions");
     verb_synonyms = json_string_array(json, "verb_synonyms");
     noun_synonyms = json_string_array(json, "noun_synonyms");
     relative_patterns = json_string_array(json, "relative_patterns");
@@ -253,6 +262,7 @@ bool LanguageRules::save(const std::string& path) const {
     write_array(out, "part_of_templates", part_of_templates);
     write_array(out, "sequence_ordinals", sequence_ordinals);
     write_array(out, "document_title", document_title);
+    write_array(out, "verb_prepositions", verb_prepositions);
     write_array(out, "verb_synonyms", verb_synonyms);
     write_array(out, "noun_synonyms", noun_synonyms);
     write_array(out, "relative_patterns", relative_patterns);

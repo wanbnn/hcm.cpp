@@ -248,6 +248,10 @@ std::string MorphologicalRealizer::realize_clause(const CausalStep& step,
             if (step.src_number == GramNumber::PLUR && !obj_phrase.ends_with("s")) obj_phrase += "s";
         }
     }
+    if (lang == "pt") {
+        const auto preposition = rules_.verb_preposition(relation);
+        if (!preposition.empty()) obj_phrase = preposition + " " + obj_phrase;
+    }
     auto clause = replace_all(pattern, "[SUBJ:ENT]", subject_surface);
     clause = replace_all(clause, "[PRED:VERB]", verb_phrase);
     clause = replace_all(clause, "[OBJ:ENT]", obj_phrase);

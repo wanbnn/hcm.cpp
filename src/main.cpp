@@ -31,6 +31,7 @@ void print_usage() {
               << "  cognicore stats --model <dir_modelo>\n"
               << "  cognicore ingest-code --repo <dir> --model <dir_modelo> [--use-gpu]\n"
               << "  cognicore mine-constructions --input <dir_ou_txt> --model <dir_modelo> --out <saida.jsonl> [--limit-files N]\n"
+              << "  cognicore clear-facts --model <dir_modelo>\n"
               << "  cognicore code --model <dir_modelo> --workspace <dir> --lang cpp|py|js --task <descrição>\n"
               << "  cognicore train-realizer --model <dir_modelo> [--use-gpu]\n"
               << "  cognicore evaluate-fluency --model <dir_modelo> --input <texto> [--out <relatorio.json>]\n"
@@ -753,6 +754,19 @@ int cmd_chat(int argc, char** argv) {
     return 0;
 }
 
+int cmd_clear_facts(int argc, char** argv) {
+    const auto model_dir = get_arg(argc, argv, "--model");
+    if (model_dir.empty()) { print_usage(); return 1; }
+    ModelBundle bundle;
+    if (!bundle.load(model_dir, false)) { std::cerr << "Erro ao carregar modelo.\n"; return 1; }
+    bundle.graph = CausalGraph{};
+    bundle.sdm = KanervaSDM{};
+    bundle.terms.clear();
+    if (!bundle.save(model_dir)) { std::cerr << "Erro ao salvar modelo.\n"; return 1; }
+    std::cout << "[clear-facts] grafo e SDM limpos; codebook/Tsetlin/lexico preservados\n";
+    return 0;
+}
+
 int cmd_mine_constructions(int argc, char** argv) {
     const auto input = get_arg(argc, argv, "--input");
     const auto model_dir = get_arg(argc, argv, "--model");
@@ -923,6 +937,7 @@ int run_cli(int argc, char** argv) {
     if (cmd == "stats")          return cmd_stats(argc, argv);
     if (cmd == "ingest-code") return cmd_ingest_code(argc, argv);
     if (cmd == "mine-constructions") return cmd_mine_constructions(argc, argv);
+    if (cmd == "clear-facts") return cmd_clear_facts(argc, argv);
     if (cmd == "code") return cmd_code(argc, argv);
     if (cmd == "train-realizer") return cmd_train_realizer(argc, argv);
     if (cmd == "evaluate-fluency") return cmd_evaluate_fluency(argc, argv);

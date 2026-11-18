@@ -238,7 +238,12 @@ AssistantReply AssistantSession::respond(const std::string& input, CodeLanguage 
         reply.trace.decision_override = "DOCUMENT: sem conteúdo suficiente";
     } else if (reply.route == AssistantRoute::CODE_GENERATE_OR_PATCH) {
         const auto requested_language = detect_requested_language(TextParser::utf8_tolower(effective_input), language, model_.language_rules);
-        const auto result = synthesizer_.synthesize(effective_input, requested_language,
+        std::string code_input = effective_input;
+        const bool arithmetic = std::any_of(code_input.begin(), code_input.end(),
+            [](unsigned char c) { return std::isdigit(c) || c == '+' || c == '-' || c == '*' || c == '/'; });
+        if (arithmetic && code_input.find("calcule") == std::string::npos)
+            code_input += " calcule";
+        const auto result = synthesizer_.synthesize(code_input, requested_language,
                                                     model_.code_graph, model_.codebook);
         std::ostringstream evidence;
         if (result.syntax_valid) {
@@ -281,6 +286,7 @@ AssistantReply AssistantSession::respond(const std::string& input, CodeLanguage 
 
     }
     reply.trace.router_evidence = routing;
+    reply.text = model_.discourse.display_text(reply.text);
     model_.episodes.emplace_back(input, reply.text);
     if (model_.episodes.size() > 128) model_.episodes.erase(model_.episodes.begin());
     last_route_ = reply.route;

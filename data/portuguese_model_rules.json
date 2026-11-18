@@ -501,5 +501,15 @@
     "en|Next",
     "en|Then",
     "en|Finally"
+  ],
+  "verb_prepositions": [
+    "ficar=em",
+    "localizar=em",
+    "situar=em",
+    "precisar=de",
+    "necessitar=de",
+    "gostar=de",
+    "depender=de",
+    "tratar=de"
   ]
 }

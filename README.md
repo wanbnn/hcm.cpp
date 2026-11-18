@@ -199,7 +199,7 @@ stopwords. O `ContentPlanner` escolhe o formato da resposta pelo conteúdo
 
 A versão `models/conversa-pt-fluent-v3.2` dobra o corpus (1.306 artigos da
 Wikipédia, 245 livros do Gutenberg, ~110 MB), sobe o codebook para **128.000
-tipos**, adiciona fatos de Brasil/França/Itália/domínio (364 nós/287 arestas) e
+tipos**, adiciona fatos de Brasil/França/Itália/domínio (348 nós/278 arestas) e
 expande os padrões de código Python. Ficha:
 [modelo v3.2](docs/MODEL_CONVERSA_PT_FLUENT_V32.md).
 

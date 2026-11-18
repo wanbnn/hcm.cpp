@@ -181,7 +181,6 @@
     "jamais",
     "not",
     "never",
-    "no",
     "don't",
     "doesn't"
   ],
@@ -873,7 +872,9 @@
     "correia",
     "polia",
     "árvore de manivelas",
-    "capital"
+    "capital",
+    "mata atlântica",
+    "mata atlantica"
   ],
   "masculine_words": [
     "motor",
@@ -921,7 +922,11 @@
     "país",
     "pais",
     "macarrão",
-    "macarrao"
+    "macarrao",
+    "pantanal",
+    "cerrado",
+    "brics",
+    "otan"
   ],
   "singular_exceptions": [
     "gás",
@@ -931,7 +936,10 @@
     "pais",
     "mais",
     "menos",
-    "paris"
+    "paris",
+    "rio amazonas",
+    "brics",
+    "otan"
   ],
   "np_boundary_prepositions": [
     "em",
