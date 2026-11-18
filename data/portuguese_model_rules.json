@@ -486,5 +486,20 @@
     "pt|; assim, ",
     "en|; therefore, ",
     "en|; as a result, "
+  ],
+  "part_of_templates": [
+    "pt|{SUBJ} é formado {OBJS}.",
+    "pt|{SUBJ} é composto {OBJS}.",
+    "en|{SUBJ} is made up of {OBJS}."
+  ],
+  "sequence_ordinals": [
+    "pt|Primeiro",
+    "pt|Em seguida",
+    "pt|Depois",
+    "pt|Por fim",
+    "en|First",
+    "en|Next",
+    "en|Then",
+    "en|Finally"
   ]
 }

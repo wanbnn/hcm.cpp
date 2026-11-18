@@ -48,6 +48,7 @@ struct DocumentPlan {
 struct RenderOptions {
     bool title = true;
     bool headings = true;
+    bool natural = false; // cohesive prose: coordination, pronouns, ordinals
     size_t max_sentences = 0; // 0 = no limit
 };
 

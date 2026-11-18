@@ -180,6 +180,7 @@ AssistantReply AssistantSession::respond(const std::string& input, CodeLanguage 
         RenderOptions options;
         options.title = content_plan.shape == ResponseShape::DOCUMENT;
         options.headings = content_plan.shape == ResponseShape::DOCUMENT;
+        options.natural = true;
         DocumentPlanner planner;
         reply.text = planner.realize(content_plan.document, surface, rules, options);
         reply.trace.decision_override = "CONTENT: " + content_plan.rationale;

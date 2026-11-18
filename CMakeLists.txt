@@ -106,6 +106,7 @@ set(COGNICORE_SOURCES
     src/symbolic_math.cpp
     src/term_resolver.cpp
     src/content_planner.cpp
+    src/natural_prose.cpp
     src/model_bundle.cpp
 )
 

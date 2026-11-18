@@ -188,10 +188,23 @@ apenas como override de teste.
   `DocumentPlanner` virou renderizador de `ContentPlan`; chat e `write` usam o
   mesmo motor.
 
-Ainda há limites de superfície: algumas concordâncias e termos compostos
-menos frequentes saem imperfeitos, e o corpus inteiro não é convertido em
-fatos. O ganho estrutural é que o modelo já decide o tamanho pelo conteúdo
-disponível, não por uma lista fixa de palavras.
+### Prosa natural
+
+O `NaturalProseRealizer` agrupa fatos por sujeito/relação antes de realizar:
+
+- coordena objetos de partes: “O motor de combustão interna é formado pelo
+  conjunto móvel, pelo cabeçote e pelo bloco.”;
+- usa pronomes para o tópico repetido: “Ele produz o trabalho. Ele usa o ciclo
+  Otto.”;
+- usa ordinais em sequências: “Primeiro, a admissão precede a compressão; em
+  seguida, ...; por fim, ...”.
+
+Não é geração neural palavra por palavra: é composição simbólica com
+coesão de discurso. Isso evita a saída anterior, que repetia o sujeito inteiro
+em cada frase e apenas colava sentenças prontas. Ainda há limites de
+concordância em compostos coordenados e em termos menos frequentes, mas o
+texto agora tem parágrafos coesos, não uma lista de fatos justapostos.
+
 
 ## Métricas
 

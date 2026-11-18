@@ -1,4 +1,5 @@
 #include "core/document_planner.hpp"
+#include "core/natural_prose.hpp"
 
 #include <algorithm>
 #include <set>
@@ -231,6 +232,14 @@ std::string DocumentPlanner::realize(const DocumentPlan& plan,
         std::ostringstream section_out;
         for (size_t p = 0; p < section.paragraphs.size(); ++p) {
             const auto& paragraph = section.paragraphs[p];
+            if (options.natural) {
+                const auto natural = NaturalProseRealizer{}.realize(paragraph, rules);
+                if (!natural.empty()) {
+                    section_out << natural << "\n\n";
+                    emitted_sentences += paragraph.sentences.size();
+                }
+                continue;
+            }
             std::string paragraph_text;
             for (const auto& sentence : paragraph.sentences) {
                 if (options.max_sentences && emitted_sentences >= options.max_sentences) break;

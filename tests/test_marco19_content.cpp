@@ -75,7 +75,15 @@ int main() {
         assert(text.find("## Partes") != std::string::npos);
         assert(text.find("bloco") != std::string::npos);
         assert(text.find("cabeçote") != std::string::npos);
-        std::cout << "[PASS] ContentPlanner: MECHANISM -> DOCUMENT\n";
+
+        RenderOptions natural_options;
+        natural_options.title = true;
+        natural_options.headings = true;
+        natural_options.natural = true;
+        const auto natural = renderer.realize(plan.document, mouth, rules, natural_options);
+        assert(natural.find("é formado pelo") != std::string::npos);
+        assert(natural.find("Ele ") != std::string::npos);
+        std::cout << "[PASS] ContentPlanner: MECHANISM -> DOCUMENT (prosa natural)\n";
     }
 
     // A single definition should stay brief.

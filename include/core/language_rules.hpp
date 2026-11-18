@@ -42,6 +42,8 @@ struct LanguageRules {
     std::vector<std::string> section_alternatives;
     std::vector<std::string> section_conclusion;
     std::vector<std::string> document_connectors;
+    std::vector<std::string> part_of_templates;
+    std::vector<std::string> sequence_ordinals;
     std::vector<std::string> document_title;
     std::vector<std::string> verb_synonyms;
     std::vector<std::string> noun_synonyms;

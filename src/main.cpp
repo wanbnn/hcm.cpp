@@ -644,7 +644,9 @@ int cmd_write(int argc, char** argv) {
                              sections, paragraphs, &bundle.terms, &bundle.parser);
     }
     DocumentPlanner renderer;
-    const auto text = renderer.realize(plan, *mouth, bundle.language_rules);
+    RenderOptions options;
+    options.natural = true;
+    const auto text = renderer.realize(plan, *mouth, bundle.language_rules, options);
     if (text.empty()) { std::cerr << "Não há fatos suficientes sobre o tópico.\n"; return 1; }
     const auto output = get_arg(argc, argv, "--out");
     if (!output.empty()) { std::ofstream file(output); if (!file) return 1; file << text; }
