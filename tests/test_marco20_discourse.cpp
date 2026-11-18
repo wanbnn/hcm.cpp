@@ -100,7 +100,7 @@ int main() {
         LanguageRules rules;
         const auto text = DiscourseGenerator{}.realize(paragraph, rules);
         assert(text.find("é formado pelo") != std::string::npos);
-        assert(text.find("Ele ") != std::string::npos);
+        assert(text.find("produz o trabalho e usa") != std::string::npos);
         assert(text.find("bloco") != std::string::npos);
         assert(text.find("cabeçote") != std::string::npos);
         std::cout << "[PASS] DiscourseGenerator: coordenação + anáfora\n";

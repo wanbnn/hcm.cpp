@@ -475,20 +475,49 @@ std::string realize_sentence(const SentencePlan& sentence, const std::vector<Ent
         return MorphologicalRealizer::contract_prepositions(text);
     }
 
-    std::string last_subject;
+    // Coordinate VPs that share the same subject:
+    // "Ele transforma X, produz Y e usa Z." instead of one sentence per fact.
+    std::string last_relation, current_subject;
+    std::vector<std::string> predicates;
+    std::string output_text;
+    auto object_phrase = [&](const CausalStep& step) {
+        return MorphologicalRealizer::contract_prepositions(
+            morphology.realize_clause(step, "", lang, "[OBJ:ENT]"));
+    };
+    auto verb_phrase = [&](const CausalStep& step) {
+        return MorphologicalRealizer::contract_prepositions(
+            morphology.realize_clause(step, "", lang, "[PRED:VERB]"));
+    };
+    auto flush = [&]() {
+        if (predicates.empty()) return;
+        if (!output_text.empty()) output_text += ' ';
+        for (size_t i = 0; i < predicates.size(); ++i) {
+            if (i) output_text += (i + 1 == predicates.size()) ? " e " : ", ";
+            output_text += predicates[i];
+        }
+        if (output_text.back() != '.' && output_text.back() != '!' && output_text.back() != '?')
+            output_text += '.';
+        predicates.clear();
+    };
     for (size_t i = 0; i < sentence.propositions.size(); ++i) {
         const auto& proposition = sentence.propositions[i];
         auto subject = subject_surface(i);
         if (subject.empty()) subject = article_np(entity_by_id(entities, proposition.subject), lang);
-        if (i > 0 && proposition.step.src == last_subject)
-            subject = pronoun(entity_by_id(entities, proposition.subject), lang);
         auto clause = MorphologicalRealizer::contract_prepositions(
             morphology.realize_clause(proposition.step, subject, lang));
-        if (!output.empty()) output += ". ";
-        output += capitalize(clause);
-        last_subject = proposition.step.src;
+        if (current_subject.empty() || proposition.step.src != current_subject) {
+            flush();
+            current_subject = proposition.step.src;
+            predicates.push_back(capitalize(clause));
+        } else if (proposition.step.rel == last_relation) {
+            predicates.back() += " e " + object_phrase(proposition.step);
+        } else {
+            predicates.push_back(verb_phrase(proposition.step) + " " + object_phrase(proposition.step));
+        }
+        last_relation = proposition.step.rel;
     }
-    return output;
+    flush();
+    return output_text;
 }
 
 } // namespace

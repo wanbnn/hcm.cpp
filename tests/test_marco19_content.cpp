@@ -82,7 +82,9 @@ int main() {
         natural_options.natural = true;
         const auto natural = renderer.realize(plan.document, mouth, rules, natural_options);
         assert(natural.find("é formado pelo") != std::string::npos);
-        assert(natural.find("Ele ") != std::string::npos);
+        assert(natural.find("transforma") != std::string::npos);
+        assert(natural.find("produz") != std::string::npos);
+        assert(natural.find(" e ") != std::string::npos);
         std::cout << "[PASS] ContentPlanner: MECHANISM -> DOCUMENT (prosa natural)\n";
     }
 

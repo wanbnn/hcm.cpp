@@ -235,9 +235,14 @@ ContentPlan
 Exemplo:
 
 ```text
-O motor de combustão interna é formado pelo conjunto móvel, pelo cabeçote e pelo bloco.
-O motor de combustão interna transforma a queima da mistura. Ele produz o trabalho. Ele usa o ciclo otto.
+O motor de combustão interna contém o conjunto móvel, o cabeçote e o bloco.
+
+O motor de combustão interna transforma a queima da mistura, produz o trabalho e usa o ciclo otto.
 ```
+
+VPs de mesmo sujeito são coordenados com vírgula + “e” final, em vez de
+virar uma frase por fato. Quando o sujeito muda, o `ReferenceGenerator`
+decide entre NP completo e pronome.
 
 Ainda é composição simbólica, não geração neural palavra por palavra. O
 ganho é estrutural: coordenação, referência e discurso são decididos antes da
