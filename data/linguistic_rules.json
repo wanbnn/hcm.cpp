@@ -1,0 +1,25 @@
+{
+  "causal_markers": [
+    "porque", "pois", "causa", "provoca", "gera", "produz", "leva a",
+    "resulta em", "faz com que", "acarreta", "origina", "logo", "portanto",
+    "causes", "leads to", "results in", "produces", "generates", "triggers", "because"
+  ],
+  "inhibitory_markers": [
+    "impede", "bloqueia", "evita", "reduz", "diminui", "neutraliza", "apaga",
+    "prevents", "blocks", "inhibits", "reduces", "stops"
+  ],
+  "taxonomic_markers": [
+    "é um", "é uma", "são", "possui", "tem", "contém", "faz parte de",
+    "is a", "is an", "are", "has", "contains", "part of"
+  ],
+  "action_markers": [
+    "derrete", "aquece", "esfria", "queima", "evapora", "congela", "transforma",
+    "melts", "heats", "cools", "burns", "evaporates", "freezes", "transforms"
+  ],
+  "stopwords": [
+    "o", "a", "os", "as", "um", "uma", "uns", "umas",
+    "de", "do", "da", "dos", "das", "em", "no", "na", "nos", "nas",
+    "por", "para", "com", "sem", "sob", "sobre", "que", "se", "e", "ou",
+    "the", "an", "of", "in", "on", "at", "to", "for", "with", "by", "and", "or", "that", "which"
+  ]
+}
