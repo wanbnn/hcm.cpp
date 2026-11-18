@@ -277,7 +277,7 @@ std::string DocumentPlanner::realize(const DocumentPlan& plan,
         }
         if (options.max_sentences && emitted_sentences >= options.max_sentences) break;
     }
-    return out.str();
+    return options.discourse ? options.discourse->display_text(out.str()) : out.str();
 }
 
 std::string DocumentPlanner::revise(const std::string& text, const LanguageRules& rules) {

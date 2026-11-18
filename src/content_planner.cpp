@@ -253,6 +253,22 @@ ContentPlan ContentPlanner::plan(const std::string& input,
         add_move(SectionRole::CAUSES, "Funcionamento", plan.answer.functions);
     } else {
         add_move(SectionRole::CAUSES, "Causas", plan.answer.causes);
+        const bool has_chain = std::any_of(plan.answer.paths.begin(), plan.answer.paths.end(),
+            [](const CausalPath& path) { return path.steps.size() >= 2; });
+        if (has_chain) {
+            DocumentSection section;
+            section.role = SectionRole::CONSEQUENCES;
+            section.heading = "Cadeia causal";
+            DocumentParagraph paragraph;
+            paragraph.topic = topic;
+            DocumentSentence sentence;
+            sentence.plan.intent = DialogIntent::EXPLAIN_CAUSE;
+            sentence.plan.language = rules.language;
+            sentence.plan.paths = plan.answer.paths;
+            paragraph.sentences.push_back(std::move(sentence));
+            section.paragraphs.push_back(std::move(paragraph));
+            plan.document.sections.push_back(std::move(section));
+        }
         add_move(SectionRole::CONSEQUENCES, "Consequências", plan.answer.functions);
         add_move(SectionRole::CONCLUSION, "Conclusão",
                  plan.answer.functions.empty() ? plan.answer.definitions

@@ -26,12 +26,14 @@ struct DiscourseConfig {
     std::vector<Construction> constructions;
     std::unordered_map<std::string, std::string> contractions; // "por|o" -> "pelo"
     std::unordered_map<std::string, std::string> entity_types; // canonical -> type
+    std::vector<std::string> proper_nouns;
 
     bool load(const std::string& model_dir);
     std::vector<const Construction*> constructions_for(RelationType relation) const;
     std::string entity_type(const std::string& canonical) const;
     std::string contraction(const std::string& preposition, GramGender gender,
                             GramNumber number) const;
+    std::string display_text(std::string text) const;
 };
 
 } // namespace cognicore

@@ -227,17 +227,18 @@ std::string MorphologicalRealizer::realize_clause(const CausalStep& step,
         for (const auto* article : {"o ", "a ", "os ", "as ", "um ", "uma ", "uns ", "umas "})
             if (lowered.starts_with(article)) { has_article = true; break; }
         const auto head = TextParser::utf8_tolower(object);
-        const bool superlative = head.starts_with("maior ") || head.starts_with("menor ") ||
-                                 head.starts_with("melhor ") || head.starts_with("pior ");
-        if (superlative)
+        const bool definite = head.starts_with("maior ") || head.starts_with("menor ") ||
+                              head.starts_with("melhor ") || head.starts_with("pior ") ||
+                              head.starts_with("capital ");
+        if (definite)
             obj_phrase = (step.dst_number == GramNumber::PLUR
                 ? (step.dst_gender == GramGender::FEM ? "as " : "os ")
                 : (step.dst_gender == GramGender::FEM ? "a " : "o ")) + object;
+        else if (step.dst_number == GramNumber::PLUR)
+            obj_phrase = has_article ? object : object;
         else
             obj_phrase = has_article ? object
-                : (step.dst_number == GramNumber::PLUR
-                    ? (step.dst_gender == GramGender::FEM ? "umas " : "uns ")
-                    : (step.dst_gender == GramGender::FEM ? "uma " : "um ")) + object;
+                : (step.dst_gender == GramGender::FEM ? "uma " : "um ") + object;
     }
 
     if (step.type == RelationType::PROPERTY) {

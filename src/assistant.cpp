@@ -184,7 +184,10 @@ AssistantReply AssistantSession::respond(const std::string& input, CodeLanguage 
         if (*shape_override_ == ResponseShape::DOCUMENT) constraints.force_document = true;
     }
     ContentPlan content_plan;
-    const bool content_candidate = !math_answer && !resource_context &&
+    const bool learning_priority = online_learning_ &&
+        (reply.route == AssistantRoute::FACT_UPDATE ||
+         reply.route == AssistantRoute::CAUSAL_REASONING);
+    const bool content_candidate = !math_answer && !resource_context && !learning_priority &&
         reply.route != AssistantRoute::CODE_GENERATE_OR_PATCH &&
         reply.route != AssistantRoute::CODE_QUERY_OR_EXPLAIN;
     if (content_candidate) {
@@ -215,6 +218,18 @@ AssistantReply AssistantSession::respond(const std::string& input, CodeLanguage 
         DocumentPlanner planner;
         reply.text = planner.realize(content_plan.document, surface, rules, options);
         reply.trace.decision_override = "CONTENT: " + content_plan.rationale;
+        for (const auto& section : content_plan.document.sections)
+            for (const auto& paragraph : section.paragraphs)
+                for (const auto& sentence : paragraph.sentences) {
+                    for (const auto& path : sentence.plan.paths) {
+                        reply.trace.paths.push_back(path);
+                        for (const auto& step : path.steps)
+                            if (step.edge_id != UINT32_MAX &&
+                                std::find(reply.trace.edge_ids.begin(), reply.trace.edge_ids.end(),
+                                          step.edge_id) == reply.trace.edge_ids.end())
+                                reply.trace.edge_ids.push_back(step.edge_id);
+                    }
+                }
     } else if (document_request) {
         reply.route = AssistantRoute::DOCUMENT_GENERATION;
         const auto topic = document_topic(lower, rules);
