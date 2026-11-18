@@ -18,12 +18,17 @@ ctest --test-dir build --output-on-failure
 AMD HIP/ROCm:
 
 ```bash
-cmake -B build_rocm -DUSE_ROCM=ON -DCMAKE_HIP_ARCHITECTURES=gfx1200
+cmake -B build_rocm -DUSE_ROCM=ON -DCMAKE_HIP_ARCHITECTURES=gfx1200 \
+  -DCMAKE_BUILD_TYPE=Release
 cmake --build build_rocm -j$(nproc)
 ctest --test-dir build_rocm --output-on-failure
 ```
 
 HIP acelera indexação e treino simbólico; a inferência conversacional usa CPU.
+No `train-dialogue` e no `train-realizer` com `--use-gpu`, o estado TA da Tsetlin
+e o dataset empacotado ficam residentes na VRAM durante o `fit`; o host só
+recebe uma cópia no início e no fim. O palco de parsing/PPM/léxico continua em
+RAM por ser sequencial e baseado em estruturas do corpus.
 Tree-sitter e suas gramáticas são obtidos pelo CMake FetchContent em versões
 fixadas. Asserções ficam ativas nos testes mesmo em Release.
 
@@ -168,6 +173,14 @@ e estatísticas sem importar ficção ou respostas de datasets para o grafo fact
 A terceira geração treinada (`models/conversa-pt-fluent-v3`) usa o mesmo corpus
 público e adiciona o parser contextual, grafo mmap, AST ampliada e ferramentas de
 calibração/avaliação. Ficha: [modelo v3](docs/MODEL_CONVERSA_PT_FLUENT_V3.md).
+
+A versão `models/conversa-pt-fluent-v3.1` mantém a arquitetura e o mesmo
+treino de diálogo, mas amplia o corpus linguístico com 695 artigos da Wikipédia
+em português, 99 livros de domínio público do Project Gutenberg e PDFs
+educacionais públicos — cerca de 66 MB de texto, 10,4 milhões de tokens e
+vocabulário VSA de 48 mil tipos. O treino simbólico roda em HIP/ROCm e a
+inferência conversacional continua em CPU. Ficha:
+[modelo v3.1](docs/MODEL_CONVERSA_PT_FLUENT_V31.md).
 
 ## Benchmarks próprios
 

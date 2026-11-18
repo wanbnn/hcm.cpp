@@ -1,8 +1,10 @@
 # Modelo português com realizador analógico (v2)
 
-Esta ficha descreve o artefato v2. A versão atual, com parser contextual, grafo
-mmap, AST ampliada e benchmarks, é a
-[v3](MODEL_CONVERSA_PT_FLUENT_V3.md).
+Esta ficha descreve o artefato v2. A versão atual, com corpus público ampliado
+(Wikipédia, Gutenberg e PDFs), é a
+[v3.1](MODEL_CONVERSA_PT_FLUENT_V31.md); a
+[v3](MODEL_CONVERSA_PT_FLUENT_V3.md) permanece como referência da arquitetura
+anterior.
 
 Artefato: `models/conversa-pt-fluent-v2` (link para
 `/run/media/wanderson/DADOS_1TB/cognicore/models/conversa-pt-fluent-v2`).

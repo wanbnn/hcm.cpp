@@ -212,6 +212,21 @@ void TsetlinMachine::fit(const std::vector<std::vector<uint64_t>>& X_bits,
                          size_t epochs,
                          bool use_gpu) {
     const size_t n = std::min(X_bits.size(), y.size());
+    if (n == 0) return;
+
+    if (use_gpu && backend::is_gpu_available()) {
+        backend::TsetlinTrainConfig cfg;
+        cfg.num_features = cfg_.num_features;
+        cfg.num_classes = cfg_.num_classes;
+        cfg.clauses_per_class = cfg_.clauses_per_class;
+        cfg.n_states = cfg_.n_states;
+        cfg.margin_T = cfg_.margin_T;
+        cfg.s_param = cfg_.s_param;
+        cfg.seed = cfg_.seed;
+        // Keeps TA states plus the packed dataset in VRAM for the whole run.
+        if (backend::tsetlin_train_device(ta_states_, clause_signs_, X_bits, y, epochs, cfg)) return;
+    }
+
     std::vector<size_t> order(n);
     for (size_t i = 0; i < n; ++i) order[i] = i;
 

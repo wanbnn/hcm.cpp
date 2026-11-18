@@ -256,4 +256,20 @@ void tsetlin_update_clauses(int8_t* ta_states,
     }
 }
 
+bool tsetlin_train_device(std::vector<int8_t>& ta_states,
+                          std::vector<int8_t>& clause_signs,
+                          const std::vector<std::vector<uint64_t>>& X_bits,
+                          const std::vector<size_t>& y,
+                          size_t epochs,
+                          const TsetlinTrainConfig& cfg) {
+#if COGNICORE_USE_ROCM
+    if (hip::is_gpu_available()) {
+        return hip::tsetlin_train_device(ta_states, clause_signs, X_bits, y, epochs, cfg);
+    }
+#else
+    (void)ta_states; (void)clause_signs; (void)X_bits; (void)y; (void)epochs; (void)cfg;
+#endif
+    return false;
+}
+
 } // namespace cognicore::backend

@@ -53,13 +53,17 @@ ctest --test-dir build --output-on-failure
 ROCm/HIP opcional:
 
 ```bash
-cmake -B build_rocm -DUSE_ROCM=ON -DCMAKE_HIP_ARCHITECTURES=gfx1200
+cmake -B build_rocm -DUSE_ROCM=ON -DCMAKE_HIP_ARCHITECTURES=gfx1200 \
+  -DCMAKE_BUILD_TYPE=Release
 cmake --build build_rocm -j"$(nproc)"
 ctest --test-dir build_rocm --output-on-failure
 ```
 
 A inferência usa sempre CPU. `--use-gpu` só acelera ingestão/treino onde o
-backend HIP estiver disponível.
+backend HIP estiver disponível. No `train-dialogue` e no `train-realizer`, o
+estado TA e o dataset empacotado ficam residentes na VRAM durante o `fit`.
+Para escolher a GPU discreta (por exemplo, `gfx1200`), use
+`HIP_VISIBLE_DEVICES=0` conforme a ordem de `rocminfo`/`hipGetDeviceProperties`.
 
 ## 3. Organização do corpus
 

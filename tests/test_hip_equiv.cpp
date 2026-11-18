@@ -1,4 +1,5 @@
 #include "core/backend.hpp"
+#include "core/tsetlin.hpp"
 #include "core/vsa.hpp"
 
 #include <cassert>
@@ -77,6 +78,37 @@ int main() {
                                         num_clauses, num_features, n_states, class_sum, 10, 10, 4.0f, 12345ULL, true);
         assert(ta_cpu == ta_gpu);
         std::cout << "[PASS] HIP tsetlin_eval_clauses & tsetlin_update_clauses == CPU\n";
+    }
+
+    // 4. Full VRAM-resident fit equivalence (order, seeds, feedback and pruning)
+    {
+        TsetlinConfig cfg;
+        cfg.num_features = 512;
+        cfg.num_classes = 12;
+        cfg.clauses_per_class = 20;
+        cfg.n_states = 30;
+        cfg.margin_T = 20;
+        cfg.s_param = 4.0f;
+        cfg.seed = 0x123456789ABCDEF0ULL;
+
+        const size_t n = 601;
+        std::vector<std::vector<uint64_t>> X(n, std::vector<uint64_t>(8));
+        std::vector<size_t> y(n);
+        uint64_t state = 0x9E3779B97F4A7C15ULL;
+        for (size_t i = 0; i < n; ++i) {
+            for (size_t w = 0; w < 8; ++w) {
+                state ^= state << 13; state ^= state >> 7; state ^= state << 17;
+                X[i][w] = state;
+            }
+            y[i] = i % cfg.num_classes;
+        }
+
+        TsetlinMachine cpu(cfg), gpu(cfg);
+        cpu.fit(X, y, 4, false);
+        gpu.fit(X, y, 4, true);
+        assert(cpu.ta_states() == gpu.ta_states());
+        assert(cpu.clause_signs() == gpu.clause_signs());
+        std::cout << "[PASS] HIP VRAM-resident Tsetlin fit == CPU\n";
     }
 
     return 0;

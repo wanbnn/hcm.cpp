@@ -1,4 +1,4 @@
-Versão mais recente para teste: [conversa-pt-fluent-v2](MODEL_CONVERSA_PT_FLUENT.md). Esta ficha descreve a versão 1 preservada.
+Versão mais recente para teste: [conversa-pt-fluent-v3.1](MODEL_CONVERSA_PT_FLUENT_V31.md). Esta ficha descreve a versão 1 preservada.
 
 # Conversa PT v1 — modelo simbólico para teste local
 

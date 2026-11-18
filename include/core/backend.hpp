@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 namespace cognicore::backend {
 
@@ -47,6 +48,27 @@ void tsetlin_eval_clauses(const int8_t* ta_states,
                           int8_t threshold,
                           uint8_t* clause_outputs,
                           bool use_gpu = false);
+
+struct TsetlinTrainConfig {
+    size_t num_features = 4096 + 64;
+    size_t num_classes = 1;
+    size_t clauses_per_class = 40;
+    int8_t n_states = 50;
+    int32_t margin_T = 15;
+    float s_param = 4.0f;
+    uint64_t seed = 0x123456789ABCDEF0ULL;
+};
+
+/// Trains a full Tsetlin Machine keeping TA states and the packed dataset in
+/// device VRAM for the whole run. Host vectors are copied in once and copied
+/// back only after training. Returns false when no GPU path is available, in
+/// which case the caller must run the CPU loop and the host vectors are intact.
+bool tsetlin_train_device(std::vector<int8_t>& ta_states,
+                          std::vector<int8_t>& clause_signs,
+                          const std::vector<std::vector<uint64_t>>& X_bits,
+                          const std::vector<size_t>& y,
+                          size_t epochs,
+                          const TsetlinTrainConfig& cfg);
 
 /// Tsetlin Machine: updates TA states for one class/sample using Type I and Type II feedback.
 /// `clause_signs` is +1 or -1 per clause. `target_sign` is +1 (positive class) or -1 (negative).
@@ -98,6 +120,12 @@ void tsetlin_update_clauses(int8_t* ta_states,
                             int32_t margin_T,
                             float s_param,
                             uint64_t step_seed);
+bool tsetlin_train_device(std::vector<int8_t>& ta_states,
+                          std::vector<int8_t>& clause_signs,
+                          const std::vector<std::vector<uint64_t>>& X_bits,
+                          const std::vector<size_t>& y,
+                          size_t epochs,
+                          const TsetlinTrainConfig& cfg);
 } // namespace hip
 #endif
 

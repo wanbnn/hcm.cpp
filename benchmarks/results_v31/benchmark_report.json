@@ -1,0 +1,300 @@
+{
+  "architecture": "symbolic VSA + Kanerva SDM + Tsetlin + causal graph + DOP; no neural weights",
+  "source_model": "/run/media/wanderson/DADOS_1TB/cognicore/models/conversa-pt-fluent-v3.1",
+  "benchmark_model": "/home/wanderson/Projetos/tessel/benchmarks/results_v31/cognicore_bench_6qy3fw9d/bench_model",
+  "categories": {
+    "science": {
+      "category": "science_mcq_gpqa_style",
+      "total": 5,
+      "correct": 5,
+      "accuracy": 1.0,
+      "latency_ms": 55341.43,
+      "details": [
+        {
+          "prompt": "O que o atrito gera?",
+          "answer": "O atrito causa o calor.",
+          "expected": [
+            "calor"
+          ],
+          "correct": true
+        },
+        {
+          "prompt": "O que derrete o gelo?",
+          "answer": "O calor derrete o gelo. Alternativamente, o gelo é um sólido.",
+          "expected": [
+            "calor"
+          ],
+          "correct": true
+        },
+        {
+          "prompt": "O gelo é o quê?",
+          "answer": "O gelo é um sólido. Alternativamente, o gelo é sólido.",
+          "expected": [
+            "sólido",
+            "solido"
+          ],
+          "correct": true
+        },
+        {
+          "prompt": "O que a fotossíntese produz?",
+          "answer": "O fotossíntese produz o glicose.",
+          "expected": [
+            "glicose"
+          ],
+          "correct": true
+        },
+        {
+          "prompt": "O que a gravidade provoca?",
+          "answer": "O gravidade causa o queda.",
+          "expected": [
+            "queda"
+          ],
+          "correct": true
+        }
+      ]
+    },
+    "hard_reasoning": {
+      "category": "hard_reasoning_hle_style",
+      "total": 3,
+      "correct": 3,
+      "accuracy": 1.0,
+      "latency_ms": 50084.12,
+      "details": [
+        {
+          "prompt": "Se todos os motores aquecem, o que acontece?",
+          "answer": "Se todos os motores aquecem, então a bomba falha.",
+          "expected": [
+            "bomba"
+          ],
+          "correct": true
+        },
+        {
+          "prompt": "O que o calor aquece?",
+          "answer": "O calor aquece o água.",
+          "expected": [
+            "água",
+            "agua"
+          ],
+          "correct": true
+        },
+        {
+          "prompt": "Se o motor aquece, o que acontece?",
+          "answer": "Quando o motor aquece, a bomba falha.",
+          "expected": [
+            "bomba"
+          ],
+          "correct": true
+        }
+      ]
+    },
+    "math": {
+      "category": "math_gsm8k_style",
+      "total": 5,
+      "correct": 5,
+      "accuracy": 1.0,
+      "latency_ms": 38652.75,
+      "details": [
+        {
+          "prompt": "Quanto é 12 + 8?",
+          "answer": "Resultado: 20.",
+          "expected": [
+            "20"
+          ],
+          "correct": true
+        },
+        {
+          "prompt": "Quanto é 7 * 6?",
+          "answer": "Resultado: 42.",
+          "expected": [
+            "42"
+          ],
+          "correct": true
+        },
+        {
+          "prompt": "João tem 10 figurinhas e compra mais 5. Quantas tem?",
+          "answer": "Resultado: 15.",
+          "expected": [
+            "15"
+          ],
+          "correct": true
+        },
+        {
+          "prompt": "Maria tinha 20 balas e perdeu 6. Quantas balas restam?",
+          "answer": "Resultado: 14.",
+          "expected": [
+            "14"
+          ],
+          "correct": true
+        },
+        {
+          "prompt": "Cada livro custa 15 reais e comprei 3. Quanto é o total?",
+          "answer": "Resultado: 45.",
+          "expected": [
+            "45"
+          ],
+          "correct": true
+        }
+      ]
+    },
+    "code": {
+      "category": "code_generation_humaneval_style",
+      "total": 2,
+      "correct": 2,
+      "accuracy": 1.0,
+      "latency_ms": 12391.67,
+      "details": [
+        {
+          "task": "identity e count",
+          "code": "from mathlib import identity, count\n\ndef synthesized_pipeline(input):\n    step1 = identity(input)\n    return count(step1)\n",
+          "correct": true,
+          "error": ""
+        },
+        {
+          "task": "double_value e increment",
+          "code": "from mathlib import double_value, increment\n\ndef synthesized_pipeline(input):\n    step1 = double_value(input)\n    return increment(step1)\n",
+          "correct": true,
+          "error": ""
+        }
+      ]
+    },
+    "patch": {
+      "category": "patch_swebench_style",
+      "total": 1,
+      "correct": 1,
+      "accuracy": 1.0,
+      "latency_ms": 6282.94,
+      "details": [
+        {
+          "task": "patch process",
+          "code": "from mathlib import load_items\n\ndef patched_process(path):\n    return load_items(path)\n",
+          "correct": true,
+          "error": ""
+        }
+      ]
+    },
+    "fluency": {
+      "category": "fluency_strict_vs_fluent",
+      "total": 3,
+      "correct": 3,
+      "accuracy": 1.0,
+      "latency_ms": 64659.09,
+      "details": [
+        {
+          "prompt": "Por que o atrito causa gelo?",
+          "strict": "O atrito causa o calor. Como resultado, o calor derrete o gelo.",
+          "fluent": "O atrito causa o calor, e o calor derrete o gelo.",
+          "expected": [
+            "atrito",
+            "gelo"
+          ],
+          "fluent_coverage": true,
+          "novel_vs_strict": true,
+          "correct": true
+        },
+        {
+          "prompt": "Explique o que acontece quando a chuva causa umidade.",
+          "strict": "O chuva causa o umidade. Alternativamente, o chuva gera o umidade.",
+          "fluent": "O chuva causa o umidade. Alternativamente, o chuva gera o umidade.",
+          "expected": [
+            "umidade"
+          ],
+          "fluent_coverage": true,
+          "novel_vs_strict": false,
+          "correct": true
+        },
+        {
+          "prompt": "O que o calor faz com o gelo?",
+          "strict": "O calor derrete o gelo.",
+          "fluent": "O calor derrete o gelo.",
+          "expected": [
+            "gelo"
+          ],
+          "fluent_coverage": true,
+          "novel_vs_strict": false,
+          "correct": true
+        }
+      ],
+      "human_rating_sheet": "benchmarks/results_v31/fluency_rating_sheet.jsonl",
+      "note": "The sheet is empty by design. Human ratings were not fabricated; scores come only from returned raters."
+    },
+    "long_form": {
+      "category": "long_form_generation",
+      "total": 3,
+      "correct": 3,
+      "accuracy": 1.0,
+      "latency_ms": 37912.73,
+      "details": [
+        {
+          "topic": "calor",
+          "chars": 307,
+          "sections": 3,
+          "paragraphs": 4,
+          "sentences": 6,
+          "unique_sentence_ratio": 1.0,
+          "expected": [
+            "calor",
+            "gelo"
+          ],
+          "coverage": true,
+          "correct": true,
+          "text": "# calor: uma explicação causal\n\n## Introdução\n\nO calor derrete o gelo, mas o gelo é um sólido.\n\n## Causas\n\nO atrito gera o calor.\n\n## Consequências\n\nO calor derrete o gelo. O calor aquece a água.\n\nEm seguida, o calor aquece a água, e a água ferve o cem. O calor aquece a água, e a água ferve as cem graus.\n\n"
+        },
+        {
+          "topic": "chuva",
+          "chars": 368,
+          "sections": 2,
+          "paragraphs": 3,
+          "sentences": 7,
+          "unique_sentence_ratio": 1.0,
+          "expected": [
+            "chuva",
+            "umidade"
+          ],
+          "coverage": true,
+          "correct": true,
+          "text": "# chuva: uma explicação causal\n\n## Causas\n\nA evaporação causa a chuva.\n\n## Consequências\n\nA chuva causa a umidade. A chuva gera a umidade. A chuva causa a erosão.\n\nAlém disso, a chuva causa a umidade; por isso, a umidade causa a corrosão. A chuva gera a umidade; por isso, a umidade causa a corrosão. A chuva causa a erosão; por isso, a erosão causa o perda de solo.\n\n"
+        },
+        {
+          "topic": "memória",
+          "chars": 273,
+          "sections": 2,
+          "paragraphs": 4,
+          "sentences": 5,
+          "unique_sentence_ratio": 1.0,
+          "expected": [
+            "memória",
+            "memoria",
+            "grafo"
+          ],
+          "coverage": true,
+          "correct": true,
+          "text": "# memória: uma explicação causal\n\n## Causas\n\nO cérebro gera a memória.\n\nAlém disso, o ruído impede a memória.\n\n## Consequências\n\nA memória gera as associações. A memória causa o aprendizado.\n\nEm seguida, a memória causa o aprendizado, e o aprendizado gera o conhecimento.\n\n"
+        }
+      ],
+      "human_rating_sheet": "benchmarks/results_v31/long_form_rating_sheet.jsonl",
+      "note": "Long-form checks are automatic (coverage/structure/repetition); human ratings are not fabricated."
+    }
+  },
+  "calibration": {
+    "model": "/home/wanderson/Projetos/tessel/benchmarks/results_v31/cognicore_bench_6qy3fw9d/bench_model",
+    "input": "/home/wanderson/Projetos/tessel/benchmarks/data/heldout_pt.txt",
+    "estimator": "PPM-C ordem 5 sem exclusão (calibração de relatório)",
+    "bits_per_byte": 2.2644899,
+    "perplexity": 4.8048451,
+    "bytes": 367,
+    "ppm_contexts": 80000,
+    "fragments": 2048,
+    "trained": true,
+    "mapped": true
+  },
+  "peak_child_rss_kb": 3615096,
+  "train_log_tail": [
+    "Realizador DOP/PPM/Tsetlin treinado: 2048 fragmentos, 80000 contextos PPM."
+  ],
+  "notes": [
+    "Project-owned diagnostic sets, not the original GPQA/HLE/GSM8K/HumanEval/SWE-bench.",
+    "The science set is ingested from benchmarks/data/science_facts.txt.",
+    "PPM calibration uses a small hand-written probe, not a representative held-out corpus.",
+    "No human fluency ratings are included; use the generated rating sheet with real raters."
+  ]
+}

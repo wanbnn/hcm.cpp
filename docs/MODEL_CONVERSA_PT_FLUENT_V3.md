@@ -2,6 +2,8 @@
 
 Artefato: `models/conversa-pt-fluent-v3` (link para
 `/run/media/wanderson/DADOS_1TB/cognicore/models/conversa-pt-fluent-v3`).
+A versão mais recente é a
+[v3.1](MODEL_CONVERSA_PT_FLUENT_V31.md), com corpus público ampliado.
 As versões `conversa-pt-v1` e `conversa-pt-fluent-v2` foram preservadas.
 
 Treinamento CPU, 100% simbólico: nenhum Transformer, peso neural, PyTorch,
