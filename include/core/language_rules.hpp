@@ -45,6 +45,11 @@ struct LanguageRules {
     std::vector<std::string> document_title;
     std::vector<std::string> verb_synonyms;
     std::vector<std::string> noun_synonyms;
+    std::vector<std::string> relative_patterns;
+    std::vector<std::string> subordinate_patterns;
+    std::vector<std::string> aggregation_patterns;
+    std::vector<std::string> punctuation_sentence;
+    std::vector<std::string> punctuation_clause;
 
     bool load(const std::string& path);
     bool save(const std::string& path) const;

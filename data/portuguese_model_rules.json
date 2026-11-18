@@ -279,5 +279,20 @@
     "grafo|rede",
     "memória|RAM",
     "calor|energia térmica"
+  ],
+  "relative_patterns": [
+    "{MAIN_SUBJ} {MAIN_VERB} {MAIN_OBJ}, que {REL_VERB} {REL_OBJ}"
+  ],
+  "subordinate_patterns": [
+    "{MAIN_SUBJ} {MAIN_VERB} {MAIN_OBJ}, porque {SUB_SUBJ} {SUB_VERB} {SUB_OBJ}"
+  ],
+  "aggregation_patterns": [
+    "{SUBJ} {VERB1} {OBJ1} e {VERB2} {OBJ2}"
+  ],
+  "punctuation_sentence": [
+    "."
+  ],
+  "punctuation_clause": [
+    ", "
   ]
 }

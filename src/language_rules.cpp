@@ -143,6 +143,11 @@ bool LanguageRules::load(const std::string& path) {
     document_title = json_string_array(json, "document_title");
     verb_synonyms = json_string_array(json, "verb_synonyms");
     noun_synonyms = json_string_array(json, "noun_synonyms");
+    relative_patterns = json_string_array(json, "relative_patterns");
+    subordinate_patterns = json_string_array(json, "subordinate_patterns");
+    aggregation_patterns = json_string_array(json, "aggregation_patterns");
+    punctuation_sentence = json_string_array(json, "punctuation_sentence");
+    punctuation_clause = json_string_array(json, "punctuation_clause");
     math_word_operators.clear();
     for (const auto& value : json_string_array(json, "math_word_operators")) {
         const auto separator = value.find('|');
@@ -190,7 +195,12 @@ bool LanguageRules::save(const std::string& path) const {
     write_array(out, "document_connectors", document_connectors);
     write_array(out, "document_title", document_title);
     write_array(out, "verb_synonyms", verb_synonyms);
-    write_array(out, "noun_synonyms", noun_synonyms, true);
+    write_array(out, "noun_synonyms", noun_synonyms);
+    write_array(out, "relative_patterns", relative_patterns);
+    write_array(out, "subordinate_patterns", subordinate_patterns);
+    write_array(out, "aggregation_patterns", aggregation_patterns);
+    write_array(out, "punctuation_sentence", punctuation_sentence);
+    write_array(out, "punctuation_clause", punctuation_clause, true);
     out << "}\n";
     const auto temporary = path + ".tmp";
     std::ofstream file(temporary);

@@ -1,6 +1,7 @@
 #include "core/model_bundle.hpp"
 #include "core/assistant.hpp"
 #include "core/document_planner.hpp"
+#include "core/lexicalized_realizer.hpp"
 #include "core/morphological_realizer.hpp"
 
 #include <algorithm>
@@ -460,10 +461,12 @@ int cmd_write(int argc, char** argv) {
     ModelBundle bundle;
     if (!bundle.load(model_path, true)) { std::cerr << "Erro ao carregar modelo.\n"; return 1; }
     MorphologicalRealizer strict;
+    LexicalizedGrammarRealizer lexical(bundle.language_rules);
     const auto mode = get_arg(argc, argv, "--realizer", "strict");
     const ISurfaceRealizer* mouth = &strict;
-    if (mode == "fluent" && bundle.fluent_realizer.ready()) mouth = &bundle.fluent_realizer;
-    else if (mode != "strict" && mode != "fluent") { std::cerr << "Realizador inválido.\n"; return 1; }
+    if (mode == "lexical") mouth = &lexical;
+    else if (mode == "fluent" && bundle.fluent_realizer.ready()) mouth = &bundle.fluent_realizer;
+    else if (mode != "strict" && mode != "fluent" && mode != "lexical") { std::cerr << "Realizador inválido.\n"; return 1; }
     const size_t sections = std::stoul(get_arg(argc, argv, "--sections", "5"));
     const size_t paragraphs = std::stoul(get_arg(argc, argv, "--paragraphs", "2"));
     DocumentPlanner planner;
@@ -502,14 +505,16 @@ int cmd_chat(int argc, char** argv) {
     }
     const auto realizer = get_arg(argc, argv, "--realizer", "fluent");
     MorphologicalRealizer morphology;
+    LexicalizedGrammarRealizer lexical(bundle.language_rules);
     const ISurfaceRealizer* mouth = nullptr;
     if (realizer == "strict") mouth = &morphology;
+    else if (realizer == "lexical") mouth = &lexical;
     else if (realizer == "fluent") {
         if (!bundle.fluent_realizer.ready()) {
             std::cerr << "Realizador fluent ainda não treinado; usando strict. Execute train-realizer.\n";
             mouth = &morphology;
         } else mouth = &bundle.fluent_realizer;
-    } else { std::cerr << "Realizador inválido: use strict ou fluent.\n"; return 1; }
+    } else { std::cerr << "Realizador inválido: use strict, lexical ou fluent.\n"; return 1; }
     AssistantSession session(bundle);
     const auto language = string_to_code_lang(get_arg(argc, argv, "--lang", "cpp"));
     if (language == CodeLanguage::UNKNOWN) { std::cerr << "Linguagem inválida.\n"; return 1; }
