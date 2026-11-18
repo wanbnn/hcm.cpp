@@ -1,9 +1,11 @@
 #include "core/assistant.hpp"
+#include "core/document_planner.hpp"
 #include "core/math_solver.hpp"
 #include "core/morphological_realizer.hpp"
 #include "core/symbolic_math.hpp"
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <optional>
 #include <regex>
 #include <sstream>
@@ -97,13 +99,64 @@ std::optional<std::string> arithmetic_script(const std::string& text, CodeLangua
     return code;
 }
 
+
+std::string document_topic(const std::string& lower, const LanguageRules& rules) {
+    for (const auto& marker : rules.document_topic_markers) {
+        const auto at = lower.find(" " + marker + " ");
+        if (at == std::string::npos) continue;
+        auto topic = lower.substr(at + marker.size() + 2);
+        while (!topic.empty() && (topic.back() == '.' || topic.back() == '?' || topic.back() == ' ')) topic.pop_back();
+        if (!topic.empty()) return topic;
+    }
+    // Fallback: content words after the imperative verb.
+    for (const auto& prefix : rules.instruction_prefixes) {
+        if (!lower.starts_with(prefix)) continue;
+        auto topic = lower.substr(prefix.size());
+        while (!topic.empty() && (topic.back() == '.' || topic.back() == '?' || topic.back() == ' ')) topic.pop_back();
+        return topic;
+    }
+    return {};
+}
+
+std::optional<std::string> structural_script(const std::string& task, CodeLanguage lang,
+                                             const LanguageRules& rules) {
+    if (!rules.contains_any(task, rules.list_sum_cues)) return std::nullopt;
+    if (lang == CodeLanguage::PYTHON) {
+        return std::string(
+            "def synthesized_pipeline(values):\n"
+            "    total = 0\n"
+            "    for value in values:\n"
+            "        total += value\n"
+            "    return total\n");
+    }
+    if (lang == CodeLanguage::JAVASCRIPT || lang == CodeLanguage::TYPESCRIPT) {
+        return std::string(
+            "function synthesizedPipeline(values) {\n"
+            "  let total = 0;\n"
+            "  for (const value of values) total += value;\n"
+            "  return total;\n"
+            "}\n");
+    }
+    if (lang == CodeLanguage::CPP) {
+        return std::string(
+            "#include <vector>\n\n"
+            "int synthesized_pipeline(const std::vector<int>& values) {\n"
+            "    int total = 0;\n"
+            "    for (int value : values) total += value;\n"
+            "    return total;\n"
+            "}\n");
+    }
+    return std::nullopt;
+}
+
 bool code_followup(const std::string& lower, const LanguageRules& rules) {
     return rules.is_code_followup(lower);
 }
 }
 const char* route_name(AssistantRoute route) {
     static const char* names[] = {"CONVERSATIONAL_GENERAL", "CAUSAL_REASONING", "CODE_QUERY_OR_EXPLAIN",
-                                 "CODE_GENERATE_OR_PATCH", "FACT_UPDATE"};
+                                 "CODE_GENERATE_OR_PATCH", "FACT_UPDATE", "DOCUMENT_GENERATION",
+                                 "MATH_REASONING"};
     return names[static_cast<size_t>(route)];
 }
 AssistantRouter::AssistantRouter() : router_(router_config()) {
@@ -160,6 +213,7 @@ AssistantReply AssistantSession::respond(const std::string& input, CodeLanguage 
     std::string routing;
     reply.route = router_.classify(input, model_, &routing);
     const auto lower = TextParser::utf8_tolower(input);
+    const auto& rules = model_.language_rules;
     if (reply.route == AssistantRoute::CONVERSATIONAL_GENERAL &&
         last_route_ == AssistantRoute::CODE_GENERATE_OR_PATCH && code_followup(lower, model_.language_rules))
         reply.route = AssistantRoute::CODE_GENERATE_OR_PATCH;
@@ -170,8 +224,8 @@ AssistantReply AssistantSession::respond(const std::string& input, CodeLanguage 
     const bool math_cue = model_.language_rules.contains_any(lower, model_.language_rules.math_cues);
     const bool resource_context = model_.language_rules.contains_any(lower, model_.language_rules.resource_cues);
     std::optional<std::string> math_answer;
-    if (math_cue && !resource_context &&
-        (reply.route == AssistantRoute::CONVERSATIONAL_GENERAL || reply.route == AssistantRoute::FACT_UPDATE)) {
+    if (math_cue && !resource_context && reply.route != AssistantRoute::CODE_GENERATE_OR_PATCH &&
+        reply.route != AssistantRoute::CODE_QUERY_OR_EXPLAIN) {
         const SymbolicMath symbolic(model_.language_rules);
         if (const auto equation = symbolic.solve(input)) {
             math_answer = "Resultado: " + equation->variable + " = " + equation->value.to_string() + ".";
@@ -184,8 +238,24 @@ AssistantReply AssistantSession::respond(const std::string& input, CodeLanguage 
             reply.trace.decision_override = "MATH: aritmética inteira simbólica";
         }
     }
+    const bool document_request = !math_answer && !resource_context &&
+        rules.contains_any(lower, rules.document_cues) &&
+        !rules.contains_any(lower, rules.code_cues);
     if (math_answer) {
         reply.text = *math_answer;
+        reply.route = AssistantRoute::MATH_REASONING;
+    } else if (document_request) {
+        reply.route = AssistantRoute::DOCUMENT_GENERATION;
+        const auto topic = document_topic(lower, rules);
+        DocumentPlanner planner;
+        const auto plan = planner.plan(topic.empty() ? lower : topic, model_.graph,
+                                       model_.codebook, rules, 5, 2);
+        MorphologicalRealizer fallback;
+        const auto& surface = mouth ? *mouth : static_cast<const ISurfaceRealizer&>(fallback);
+        reply.text = planner.realize(plan, surface, rules);
+        if (reply.text.empty())
+            reply.text = "Ainda não tenho fatos suficientes sobre esse tópico para gerar um documento.";
+        reply.trace.decision_override = "DOCUMENT: " + plan.rationale;
     } else if (reply.route == AssistantRoute::CODE_GENERATE_OR_PATCH) {
         const auto requested_language = detect_requested_language(TextParser::utf8_tolower(effective_input), language, model_.language_rules);
         const auto result = synthesizer_.synthesize(effective_input, requested_language,
@@ -196,6 +266,10 @@ AssistantReply AssistantSession::respond(const std::string& input, CodeLanguage 
         } else if (auto script = arithmetic_script(effective_input, requested_language, model_.language_rules)) {
             reply.text = *script;
             reply.trace.decision_override = "CODE: script aritmético gerado sem APIs do workspace";
+        } else if (auto script = structural_script(TextParser::utf8_tolower(effective_input),
+                                                   requested_language, model_.language_rules)) {
+            reply.text = *script;
+            reply.trace.decision_override = "CODE: padrão estrutural de acumulação gerado sem workspace";
         } else {
             reply.text = result.error;
         }

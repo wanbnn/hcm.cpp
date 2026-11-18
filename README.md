@@ -73,9 +73,21 @@ não há treino de uma rede neural.
 ```
 
 `assistant` é um alias de `chat`. `--lang` seleciona a linguagem do código.
+O chat é o ponto único de entrada: o mesmo prompt pode pedir conversa, texto
+longo, matemática, código ou atualização de fato. Exemplos:
+
+```text
+Você> Escreva um texto sobre calor
+Você> Resolva 2x + 3 = 11
+Você> Quanto é 1/2 + 1/3?
+Você> Escreva um script python que soma uma lista de valores
+Você> O atrito gera calor.
+```
+
 `--realizer fluent` é o padrão: recombinação de fragmentos DOP, morfologia,
 PPM de ordem variável e Tsetlin de estilo. `--realizer strict` seleciona apenas
-`MorphologicalRealizer`. Execute `train-realizer` após ingerir o corpus; modelos
+`MorphologicalRealizer`; `--realizer lexical` usa a gramática lexicalizada
+(relativas, subordinação e agregação). Execute `train-realizer` após ingerir o corpus; modelos
 antigos sem treinamento de fluência usam strict com aviso. Outras opções são rejeitadas.
 
 Sem workspace, a sessão é salva no modelo; com workspace, em

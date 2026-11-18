@@ -75,6 +75,12 @@ nenhuma nota humana foi inventada. Use
 `scripts/evaluate_fluency_human.py score` depois que avaliadores reais
 preencherem as notas.
 
+## Chat unificado
+
+O chat é a interface principal. O mesmo prompt pode pedir texto longo,
+matemática, código, conversa causal ou aprendizado de fato; o roteador/assistente
+decide a rota. Não é necessário chamar `write`/`math`/`code` manualmente.
+
 ## Marcos 12–18
 
 O artefato agora carrega também `lexicon.bin`, `coherence.bin`,

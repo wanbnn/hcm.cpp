@@ -212,8 +212,12 @@ std::string Rational::to_string() const {
 SymbolicMath::SymbolicMath(const LanguageRules& rules) : rules_(rules) {}
 
 std::optional<SymbolicResult> SymbolicMath::evaluate(const std::string& text) const {
-    const auto expression = sanitize(text, rules_);
+    auto expression = sanitize(text, rules_);
     if (expression.find('=') != std::string::npos) return std::nullopt;
+    // Natural-language wrappers ("quanto é", "calcule") are not variables.
+    expression.erase(std::remove_if(expression.begin(), expression.end(), [](unsigned char ch) {
+        return std::isalpha(ch) != 0;
+    }), expression.end());
     auto tokens = lex(expression);
     if (tokens.empty()) return std::nullopt;
     Parser parser(std::move(tokens), "", {});
@@ -227,7 +231,10 @@ std::optional<SymbolicResult> SymbolicMath::evaluate(const std::string& text) co
 }
 
 std::optional<SymbolicResult> SymbolicMath::solve(const std::string& text) const {
-    const auto expression = sanitize(text, rules_);
+    auto expression = sanitize(text, rules_);
+    // Remove natural-language words but keep single-letter variables (x, y, z).
+    std::regex words(R"([a-zA-Z]{2,})");
+    expression = std::regex_replace(expression, words, " ");
     const auto equals = expression.find('=');
     if (equals == std::string::npos || expression.find('=', equals + 1) != std::string::npos)
         return std::nullopt;
@@ -264,7 +271,9 @@ std::optional<SymbolicResult> SymbolicMath::solve(const std::string& text) const
 }
 
 bool SymbolicMath::verify_linear(const std::string& equation, const Rational& x) const {
-    const auto expression = sanitize(equation, rules_);
+    auto expression = sanitize(equation, rules_);
+    std::regex words(R"([a-zA-Z]{2,})");
+    expression = std::regex_replace(expression, words, " ");
     const auto equals = expression.find('=');
     if (equals == std::string::npos) return false;
     std::string variable;

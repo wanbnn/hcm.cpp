@@ -217,6 +217,11 @@ target_link_libraries(test_marco17_code_tests PRIVATE cognicore_lib)
 target_compile_options(test_marco17_code_tests PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)
 add_test(NAME test_marco17_code_tests COMMAND test_marco17_code_tests)
 
+add_executable(test_marco18_chat_unified tests/test_marco18_chat_unified.cpp)
+target_link_libraries(test_marco18_chat_unified PRIVATE cognicore_lib)
+target_compile_options(test_marco18_chat_unified PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)
+add_test(NAME test_marco18_chat_unified COMMAND test_marco18_chat_unified)
+
 add_executable(test_improvements tests/test_improvements.cpp)
 target_link_libraries(test_improvements PRIVATE cognicore_lib)
 target_compile_options(test_improvements PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)

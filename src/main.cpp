@@ -33,7 +33,7 @@ void print_usage() {
               << "  cognicore evaluate-fluency --model <dir_modelo> --input <texto> [--out <relatorio.json>]\n"
               << "  cognicore write --model <dir_modelo> --topic <assunto> [--sections N] [--paragraphs N] [--realizer strict|lexical|fluent] [--out <arquivo.md>]\n"
               << "  cognicore math --expr \"2x + 3 = 11\" [--model <dir_modelo>]\n"
-              << "  cognicore chat --model <dir_modelo> [--workspace <dir>] [--realizer strict|fluent] [--lang cpp|py|js] [--debug]\n";
+              << "  cognicore chat --model <dir_modelo> [--workspace <dir>] [--realizer strict|lexical|fluent] [--lang cpp|py|js] [--debug]\n";
 }
 
 std::string get_arg(int argc, char** argv, const std::string& flag, const std::string& def = "") {

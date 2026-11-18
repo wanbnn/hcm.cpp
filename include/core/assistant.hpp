@@ -5,7 +5,7 @@
 namespace cognicore {
 enum class AssistantRoute : uint8_t {
     CONVERSATIONAL_GENERAL, CAUSAL_REASONING, CODE_QUERY_OR_EXPLAIN,
-    CODE_GENERATE_OR_PATCH, FACT_UPDATE
+    CODE_GENERATE_OR_PATCH, FACT_UPDATE, DOCUMENT_GENERATION, MATH_REASONING
 };
 const char* route_name(AssistantRoute route);
 class AssistantRouter {

@@ -69,6 +69,18 @@ neural. Todo dado linguístico específico do modelo fica em
   reais.
 - Teste de CLI cobre manifesto/retomada em `test_cli_phase2.py`.
 
+## Chat unificado
+
+Os marcos 12–18 não são comandos separados para o usuário final. O `chat`
+roteia automaticamente:
+
+- `Escreva um texto sobre calor` → `DocumentPlanner`.
+- `Resolva 2x + 3 = 11` → `SymbolicMath`.
+- `Quanto é 1/2 + 1/3?` → `SymbolicMath`.
+- `Escreva um script python...` → síntese de código.
+- `O atrito gera calor.` → aprendizado one-shot no grafo/SDM.
+- Perguntas causais continuam no grafo.
+
 ## Comandos
 
 ```bash

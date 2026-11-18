@@ -328,5 +328,31 @@
     "vector",
     "acumular",
     "reduce"
+  ],
+  "document_cues": [
+    "artigo",
+    "redação",
+    "redacao",
+    "texto longo",
+    "texto mais longo",
+    "relatório",
+    "relatorio",
+    "documento",
+    "dissertação",
+    "dissertacao",
+    "explique em detalhes",
+    "write an article",
+    "long text",
+    "essay",
+    "white paper",
+    "texto"
+  ],
+  "document_topic_markers": [
+    "sobre",
+    "about",
+    "a respeito de",
+    "do tema",
+    "acerca de",
+    "on the topic of"
   ]
 }

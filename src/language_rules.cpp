@@ -150,6 +150,8 @@ bool LanguageRules::load(const std::string& path) {
     punctuation_clause = json_string_array(json, "punctuation_clause");
     centering_pronouns = json_string_array(json, "centering_pronouns");
     list_sum_cues = json_string_array(json, "list_sum_cues");
+    document_cues = json_string_array(json, "document_cues");
+    document_topic_markers = json_string_array(json, "document_topic_markers");
     math_word_operators.clear();
     for (const auto& value : json_string_array(json, "math_word_operators")) {
         const auto separator = value.find('|');
@@ -204,7 +206,9 @@ bool LanguageRules::save(const std::string& path) const {
     write_array(out, "punctuation_sentence", punctuation_sentence);
     write_array(out, "punctuation_clause", punctuation_clause);
     write_array(out, "centering_pronouns", centering_pronouns);
-    write_array(out, "list_sum_cues", list_sum_cues, true);
+    write_array(out, "list_sum_cues", list_sum_cues);
+    write_array(out, "document_cues", document_cues);
+    write_array(out, "document_topic_markers", document_topic_markers, true);
     out << "}\n";
     const auto temporary = path + ".tmp";
     std::ofstream file(temporary);

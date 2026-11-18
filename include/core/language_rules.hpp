@@ -52,6 +52,8 @@ struct LanguageRules {
     std::vector<std::string> punctuation_clause;
     std::vector<std::string> centering_pronouns;
     std::vector<std::string> list_sum_cues;
+    std::vector<std::string> document_cues;
+    std::vector<std::string> document_topic_markers;
 
     bool load(const std::string& path);
     bool save(const std::string& path) const;
