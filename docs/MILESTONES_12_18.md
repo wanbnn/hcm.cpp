@@ -100,6 +100,8 @@ python3 benchmarks/run_benchmarks.py --cli build/cognicore --model modelo --out 
 - Kneser-Ney/cache são rankeadores simbólicos, não uma perplexidade de LLM.
 - A matemática cobre aritmética racional e equações lineares; não é um CAS
   completo (integrais, sistemas gerais, geometria).
-- A síntese de código é orientada por testes e APIs indexadas; não prova
-  correção semântica arbitrária.
+- A síntese de código é generativa por construções do modelo
+  (`code_patterns.jsonl`), com slots preenchidos e validação AST; não há
+  template hardcoded no assistente. A prova de correção ainda não é semântica
+  para qualquer programa.
 - A avaliação humana exige raters reais; o repositório não inventa notas.

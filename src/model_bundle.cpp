@@ -24,6 +24,7 @@ namespace cognicore {
 ModelBundle::ModelBundle() {
     language_rules.load_default();
     lexicon.load_synonyms(language_rules);
+    if (code_patterns.empty()) code_patterns.load_default();
 }
 
 namespace {
@@ -688,6 +689,7 @@ bool ModelBundle::save(const std::string& dir_path) const {
     if (!language_rules.save(dir_path + "/language_rules.json")) return false;
     if (!lexicon.save(dir_path + "/lexicon.bin")) return false;
     if (!coherence.save(dir_path + "/coherence.bin")) return false;
+    if (!code_patterns.save(dir_path + "/code_patterns.jsonl")) return false;
 
     {
         BinaryWriter w(dir_path + "/episodic_facts.bin");
@@ -893,10 +895,13 @@ bool ModelBundle::load(const std::string& dir_path, bool use_mmap) {
     else if (language_rules.empty())
         language_rules.load_default();
     lexicon.load_synonyms(language_rules);
+    if (code_patterns.empty()) code_patterns.load_default();
     if (fs::exists(dir_path + "/lexicon.bin")) lexicon.load(dir_path + "/lexicon.bin");
     else lexicon.clear();
     if (fs::exists(dir_path + "/coherence.bin")) coherence.load(dir_path + "/coherence.bin");
     else coherence.clear();
+    if (fs::exists(dir_path + "/code_patterns.jsonl")) code_patterns.load(dir_path + "/code_patterns.jsonl");
+    else if (code_patterns.empty()) code_patterns.load_default();
     // 1. Codebook
     {
         MappedReader r(dir_path + "/codebook.bin", use_mmap);

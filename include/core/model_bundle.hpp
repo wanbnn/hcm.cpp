@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/causal_graph.hpp"
+#include "core/code_patterns.hpp"
 #include "core/coherence.hpp"
 #include "core/context_memory.hpp"
 #include "core/episodic_memory.hpp"
@@ -25,6 +26,7 @@ struct ModelBundle {
     LanguageRules language_rules;
     Lexicon lexicon;
     CoherenceModel coherence;
+    CodePatternLibrary code_patterns;
     Codebook codebook;
     KanervaSDM sdm;
     TsetlinMachine tsetlin;

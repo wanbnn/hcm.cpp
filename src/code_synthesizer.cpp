@@ -1,5 +1,6 @@
 #include "core/code_synthesizer.hpp"
 #include "core/text_parser.hpp"
+#include "core/symbolic_math.hpp"
 
 #include <algorithm>
 #include <optional>
@@ -102,6 +103,7 @@ bool identifier_boundary(const std::string& text, size_t position, size_t length
 
 CodeSynthesizer::CodeSynthesizer() : pattern_tm_(make_code_tm_cfg()) {
     rules_.load_default();
+    patterns_.load_default();
     // Baseline structural pattern training
     train_patterns({
         {"ler arquivo de texto", CodePatternTag::READ_AND_PROCESS},
@@ -207,7 +209,33 @@ CodeSynthesisResult CodeSynthesizer::synthesize(const std::string& task_descript
         requested.back().overloads.push_back(std::move(symbol));
     }
     if (requested.empty()) {
-        res.error = "Nenhuma API do workspace corresponde ao pedido. Informe funções existentes do grafo de código.";
+        // No workspace API matched. Use a code construction from the model
+        // library, binding typed slots and validating the resulting AST.
+        const auto language = std::string(code_lang_to_string(lang));
+        if (const auto* pattern = patterns_.match(lower_task, language)) {
+            auto code = pattern->template_code;
+            auto replace_all = [](std::string& value, const std::string& from, const std::string& to) {
+                size_t at;
+                while ((at = value.find(from)) != std::string::npos) value.replace(at, from.size(), to);
+            };
+            replace_all(code, "{name}", pattern->name);
+            if (code.find("{expression}") != std::string::npos) {
+                const auto expression = SymbolicMath::extract_expression(task_description, rules_);
+                if (expression.empty()) {
+                    res.error = "A construção requer uma expressão aritmética válida.";
+                    return res;
+                }
+                replace_all(code, "{expression}", expression);
+            }
+            if (TreeSitterCodeParser::validate_syntax(code, lang)) {
+                res.code = code;
+                res.syntax_valid = true;
+                res.selected_pattern = CodePatternTag::TRANSFORM_VECTOR;
+                res.repair_notes = "construção de código do modelo: " + pattern->id;
+                return res;
+            }
+        }
+        res.error = "Nenhuma API do workspace ou construção de código corresponde ao pedido.";
         return res;
     }
 
@@ -459,39 +487,6 @@ CodeSynthesisResult CodeSynthesizer::synthesize_tested(const std::string& task_d
                                                        const std::string& workspace) const {
     CodeSynthesisResult baseline = synthesize(task_description, lang, graph, codebook);
     std::vector<std::string> candidates;
-    if (rules_.contains_any(task_description, rules_.list_sum_cues)) {
-        if (lang == CodeLanguage::PYTHON) {
-            candidates.push_back(
-                "def synthesized_pipeline(values):\n"
-                "    total = 0\n"
-                "    for value in values:\n"
-                "        total += value\n"
-                "    return total\n");
-            candidates.push_back(
-                "def synthesized_pipeline(values):\n"
-                "    if not values:\n"
-                "        return 0\n"
-                "    total = 0\n"
-                "    for value in values:\n"
-                "        total += value\n"
-                "    return total\n");
-        } else if (lang == CodeLanguage::JAVASCRIPT || lang == CodeLanguage::TYPESCRIPT) {
-            candidates.push_back(
-                "function synthesizedPipeline(values) {\n"
-                "  let total = 0;\n"
-                "  for (const value of values) total += value;\n"
-                "  return total;\n"
-                "}\n");
-        } else if (lang == CodeLanguage::CPP) {
-            candidates.push_back(
-                "#include <vector>\n\n"
-                "int synthesized_pipeline(const std::vector<int>& values) {\n"
-                "    int total = 0;\n"
-                "    for (int value : values) total += value;\n"
-                "    return total;\n"
-                "}\n");
-        }
-    }
     if (baseline.syntax_valid) candidates.push_back(baseline.code);
 
     CodeSynthesisResult best = baseline;

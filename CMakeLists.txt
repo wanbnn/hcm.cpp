@@ -96,6 +96,7 @@ set(COGNICORE_SOURCES
     src/discourse_planner.cpp
     src/document_planner.cpp
     src/code_ast.cpp
+    src/code_patterns.cpp
     src/code_synthesizer.cpp
     src/episodic_memory.cpp
     src/language_rules.cpp

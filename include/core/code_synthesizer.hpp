@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/code_ast.hpp"
+#include "core/code_patterns.hpp"
 #include "core/language_rules.hpp"
 #include "core/tsetlin.hpp"
 #include "core/vsa.hpp"
@@ -45,6 +46,7 @@ class CodeSynthesizer {
 public:
     CodeSynthesizer();
     void set_rules(const LanguageRules& rules) { rules_ = rules; }
+    void set_patterns(const CodePatternLibrary& patterns) { patterns_ = patterns; }
 
     /// Trains the internal Tsetlin pattern selector on (task_description, pattern_tag) pairs.
     void train_patterns(const std::vector<std::pair<std::string, CodePatternTag>>& examples,
@@ -72,6 +74,7 @@ private:
 
     TsetlinMachine pattern_tm_;
     LanguageRules rules_;
+    CodePatternLibrary patterns_;
 };
 
 } // namespace cognicore

@@ -29,6 +29,8 @@ class SymbolicMath {
 public:
     explicit SymbolicMath(const LanguageRules& rules = LanguageRules{});
     std::optional<SymbolicResult> evaluate(const std::string& text) const;
+    /// Extracts a bare arithmetic expression from natural-language wrapper.
+    static std::string extract_expression(const std::string& text, const LanguageRules& rules);
     std::optional<SymbolicResult> solve(const std::string& text) const;
     bool verify_linear(const std::string& equation, const Rational& x) const;
 private:

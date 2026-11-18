@@ -84,7 +84,7 @@ decide a rota. Não é necessário chamar `write`/`math`/`code` manualmente.
 ## Marcos 12–18
 
 O artefato agora carrega também `lexicon.bin`, `coherence.bin`,
-`ingestion_manifest.jsonl` e as regras de documento/gramática em
+`code_patterns.jsonl`, `ingestion_manifest.jsonl` e as regras de documento/gramática em
 `language_rules.json`. Comandos novos: `write`, `ingest-corpus`, `math` e
 `--realizer lexical`. Detalhes em [Marcos 12–18](MILESTONES_12_18.md).
 

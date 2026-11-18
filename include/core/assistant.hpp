@@ -22,7 +22,10 @@ struct AssistantReply {
 };
 class AssistantSession {
 public:
-    explicit AssistantSession(ModelBundle& model) : model_(model) {}
+    explicit AssistantSession(ModelBundle& model) : model_(model) {
+        synthesizer_.set_rules(model_.language_rules);
+        synthesizer_.set_patterns(model_.code_patterns);
+    }
     AssistantReply respond(const std::string& input, CodeLanguage language = CodeLanguage::CPP,
                            const ISurfaceRealizer* mouth = nullptr);
 private:

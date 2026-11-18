@@ -211,6 +211,22 @@ std::string Rational::to_string() const {
 
 SymbolicMath::SymbolicMath(const LanguageRules& rules) : rules_(rules) {}
 
+std::string SymbolicMath::extract_expression(const std::string& text, const LanguageRules& rules) {
+    auto expression = sanitize(text, rules);
+    const auto equals = expression.find('=');
+    if (equals != std::string::npos) return {};
+    expression.erase(std::remove_if(expression.begin(), expression.end(), [](unsigned char ch) {
+        return std::isalpha(ch) != 0;
+    }), expression.end());
+    while (!expression.empty() && (expression.front() == ' ' || expression.front() == '+' ||
+                                   expression.front() == '*' || expression.front() == '/'))
+        expression.erase(expression.begin());
+    while (!expression.empty() && (expression.back() == ' ' || expression.back() == '+' ||
+                                   expression.back() == '-' || expression.back() == '*' || expression.back() == '/'))
+        expression.pop_back();
+    return expression;
+}
+
 std::optional<SymbolicResult> SymbolicMath::evaluate(const std::string& text) const {
     auto expression = sanitize(text, rules_);
     if (expression.find('=') != std::string::npos) return std::nullopt;

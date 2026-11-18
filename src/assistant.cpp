@@ -36,69 +36,6 @@ CodeLanguage detect_requested_language(const std::string& lower, CodeLanguage fa
     return fallback;
 }
 
-std::optional<std::string> arithmetic_expression(const std::string& text, const LanguageRules& rules) {
-    std::string normalized = TextParser::utf8_tolower(text);
-    for (const auto& [word, op] : rules.math_word_operators) {
-        const auto needle = " " + word + " ";
-        size_t at;
-        while ((at = normalized.find(needle)) != std::string::npos)
-            normalized.replace(at, needle.size(), " " + op + " ");
-    }
-    std::string expression;
-    for (char ch : normalized) {
-        if (std::isdigit(static_cast<unsigned char>(ch)) || ch == '+' || ch == '-' ||
-            ch == '*' || ch == '/' || ch == '(' || ch == ')' || ch == '.' || ch == ' ')
-            expression.push_back(ch);
-    }
-    auto trim = [](std::string value) {
-        while (!value.empty() && value.front() == ' ') value.erase(value.begin());
-        while (!value.empty() && value.back() == ' ') value.pop_back();
-        return value;
-    };
-    expression = trim(expression);
-    while (!expression.empty() && (expression.front() == ' ' || expression.front() == '+' ||
-                                   expression.front() == '*' || expression.front() == '/'))
-        expression.erase(expression.begin());
-    while (!expression.empty() && (expression.back() == ' ' || expression.back() == '+' ||
-                                   expression.back() == '-' || expression.back() == '*' || expression.back() == '/'))
-        expression.pop_back();
-    const auto operators = expression.find_first_of("+-*/");
-    const auto digits = expression.find_first_of("0123456789");
-    if (operators == std::string::npos || digits == std::string::npos) return std::nullopt;
-    std::vector<int64_t> numbers;
-    std::regex number_pattern(R"(\d+)");
-    for (std::sregex_iterator it(expression.begin(), expression.end(), number_pattern), end; it != end; ++it)
-        numbers.push_back(std::stoll(it->str()));
-    if (numbers.size() < 2) return std::nullopt;
-    return expression;
-}
-
-std::optional<std::string> arithmetic_script(const std::string& text, CodeLanguage lang, const LanguageRules& rules) {
-    const auto expression = arithmetic_expression(text, rules);
-    if (!expression) return std::nullopt;
-    std::ostringstream out;
-    if (lang == CodeLanguage::PYTHON) {
-        out << "def synthesized_script():\n"
-            << "    return " << *expression << "\n\n"
-            << "if __name__ == \"__main__\":\n"
-            << "    print(synthesized_script())\n";
-    } else if (lang == CodeLanguage::JAVASCRIPT || lang == CodeLanguage::TYPESCRIPT) {
-        out << "function synthesizedScript() {\n"
-            << "  return " << *expression << ";\n"
-            << "}\n\n"
-            << "console.log(synthesizedScript());\n";
-    } else {
-        out << "#include <iostream>\n\n"
-            << "int main() {\n"
-            << "    std::cout << (" << *expression << ") << \"\\n\";\n"
-            << "    return 0;\n"
-            << "}\n";
-    }
-    const auto code = out.str();
-    if (!TreeSitterCodeParser::validate_syntax(code, lang)) return std::nullopt;
-    return code;
-}
-
 
 std::string document_topic(const std::string& lower, const LanguageRules& rules) {
     for (const auto& marker : rules.document_topic_markers) {
@@ -108,7 +45,6 @@ std::string document_topic(const std::string& lower, const LanguageRules& rules)
         while (!topic.empty() && (topic.back() == '.' || topic.back() == '?' || topic.back() == ' ')) topic.pop_back();
         if (!topic.empty()) return topic;
     }
-    // Fallback: content words after the imperative verb.
     for (const auto& prefix : rules.instruction_prefixes) {
         if (!lower.starts_with(prefix)) continue;
         auto topic = lower.substr(prefix.size());
@@ -116,37 +52,6 @@ std::string document_topic(const std::string& lower, const LanguageRules& rules)
         return topic;
     }
     return {};
-}
-
-std::optional<std::string> structural_script(const std::string& task, CodeLanguage lang,
-                                             const LanguageRules& rules) {
-    if (!rules.contains_any(task, rules.list_sum_cues)) return std::nullopt;
-    if (lang == CodeLanguage::PYTHON) {
-        return std::string(
-            "def synthesized_pipeline(values):\n"
-            "    total = 0\n"
-            "    for value in values:\n"
-            "        total += value\n"
-            "    return total\n");
-    }
-    if (lang == CodeLanguage::JAVASCRIPT || lang == CodeLanguage::TYPESCRIPT) {
-        return std::string(
-            "function synthesizedPipeline(values) {\n"
-            "  let total = 0;\n"
-            "  for (const value of values) total += value;\n"
-            "  return total;\n"
-            "}\n");
-    }
-    if (lang == CodeLanguage::CPP) {
-        return std::string(
-            "#include <vector>\n\n"
-            "int synthesized_pipeline(const std::vector<int>& values) {\n"
-            "    int total = 0;\n"
-            "    for (int value : values) total += value;\n"
-            "    return total;\n"
-            "}\n");
-    }
-    return std::nullopt;
 }
 
 bool code_followup(const std::string& lower, const LanguageRules& rules) {
@@ -263,13 +168,6 @@ AssistantReply AssistantSession::respond(const std::string& input, CodeLanguage 
         std::ostringstream evidence;
         if (result.syntax_valid) {
             reply.text = result.code;
-        } else if (auto script = arithmetic_script(effective_input, requested_language, model_.language_rules)) {
-            reply.text = *script;
-            reply.trace.decision_override = "CODE: script aritmético gerado sem APIs do workspace";
-        } else if (auto script = structural_script(TextParser::utf8_tolower(effective_input),
-                                                   requested_language, model_.language_rules)) {
-            reply.text = *script;
-            reply.trace.decision_override = "CODE: padrão estrutural de acumulação gerado sem workspace";
         } else {
             reply.text = result.error;
         }

@@ -718,7 +718,10 @@ int cmd_code(int argc, char** argv) {
     if (!bundle.load(model, true)) return 1;
     bundle.code_graph = CodeGraph{};
     TreeSitterCodeParser::ingest_directory(repo, bundle.code_graph, &bundle.sdm, has_flag(argc, argv, "--use-gpu"));
-    const auto result = CodeSynthesizer{}.synthesize(task, lang, bundle.code_graph, bundle.codebook);
+    CodeSynthesizer synthesizer;
+    synthesizer.set_rules(bundle.language_rules);
+    synthesizer.set_patterns(bundle.code_patterns);
+    const auto result = synthesizer.synthesize(task, lang, bundle.code_graph, bundle.codebook);
     if (!result.syntax_valid) { std::cerr << result.error << "\n"; return 1; }
     std::cout << result.code;
     return 0;
