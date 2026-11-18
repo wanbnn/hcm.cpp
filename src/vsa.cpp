@@ -225,7 +225,8 @@ void Codebook::finalize_semantics() {
             }
             sv.words[w] = word;
         }
-        semantic_vecs_[i] = any_nonzero ? sv : base_vecs_[i];
+        // An untouched token may already have learned semantics loaded from disk.
+        if (any_nonzero) semantic_vecs_[i] = sv;
     }
     accumulators_dirty_ = false;
 }

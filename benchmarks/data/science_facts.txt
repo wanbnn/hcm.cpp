@@ -1,0 +1,11 @@
+O atrito gera calor.
+O calor derrete gelo.
+O gelo é um sólido.
+A água ferve a cem graus.
+A gravidade provoca queda.
+A fotossíntese produz glicose.
+As plantas absorvem luz.
+A chuva causa umidade.
+A umidade causa corrosão.
+O vento gera movimento.
+O movimento gera energia.

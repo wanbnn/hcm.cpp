@@ -1,0 +1,14 @@
+{"subject":"atrito","relation":"gerar","object":"calor","text":"O atrito gera calor.","source":"https://openstax.org/books/physics/pages/9-2-mechanical-energy-and-conservation-of-energy"}
+{"subject":"calor","relation":"derreter","object":"gelo","text":"O calor derrete gelo.","source":"https://openstax.org/books/physics/pages/11-3-phase-change-and-latent-heat"}
+{"subject":"evaporação","relation":"produzir","object":"vapor","text":"A evaporação produz vapor.","source":"https://openstax.org/books/physics/pages/11-3-phase-change-and-latent-heat"}
+{"subject":"condensação","relation":"formar","object":"gotas","text":"A condensação forma gotas.","source":"https://openstax.org/books/physics/pages/11-3-phase-change-and-latent-heat"}
+{"subject":"gelo","relation":"ser","object":"sólido","text":"O gelo é um sólido.","type":"TAXONOMIC","source":"https://openstax.org/books/physics/pages/11-3-phase-change-and-latent-heat"}
+{"subject":"aquecimento","relation":"aumentar","object":"temperatura","text":"O aquecimento aumenta a temperatura.","source":"https://openstax.org/books/physics/pages/11-2-heat-specific-heat-and-heat-transfer","qualification":"Sem mudança de fase; simplificação didática, não regra universal."}
+{"subject":"resfriamento","relation":"reduzir","object":"temperatura","text":"O resfriamento reduz a temperatura.","source":"https://openstax.org/books/physics/pages/11-2-heat-specific-heat-and-heat-transfer","qualification":"Sem mudança de fase; simplificação didática, não regra universal."}
+{"subject":"cognicore","relation":"usar","object":"memória associativa","text":"O CogniCore usa memória associativa.","type":"ACTION","source":"local:README.md@8b014b8"}
+{"subject":"memória associativa","relation":"armazenar","object":"associações","text":"A memória associativa armazena associações.","type":"ACTION","source":"local:README.md@8b014b8"}
+{"subject":"tsetlin","relation":"usar","object":"autômatos inteiros","text":"A Tsetlin usa autômatos inteiros.","type":"ACTION","source":"local:include/core/tsetlin.hpp@8b014b8"}
+{"subject":"vsa","relation":"usar","object":"vetores binários","text":"A VSA usa vetores binários.","type":"ACTION","source":"local:include/core/vsa.hpp@8b014b8"}
+{"subject":"sdm","relation":"armazenar","object":"associações","text":"A SDM armazena associações.","type":"ACTION","source":"local:include/core/sdm.hpp@8b014b8"}
+{"subject":"grafo causal","relation":"armazenar","object":"relações","text":"O grafo causal armazena relações.","type":"ACTION","source":"local:include/core/causal_graph.hpp@8b014b8"}
+{"subject":"cognicore","relation":"usar","object":"transformers","text":"O CogniCore não usa Transformers.","type":"ACTION","negated":true,"source":"local:README.md@8b014b8"}

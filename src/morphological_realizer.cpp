@@ -237,8 +237,13 @@ std::string MorphologicalRealizer::realize_clause(const CausalStep& step,
 }
 
 std::string MorphologicalRealizer::realize(const SemanticPlan& plan) const {
+    if (plan.quoted_statement) return *plan.quoted_statement;
+    if (plan.resource) return realize_resource_assessment(plan);
+    if (!plan.conditional_conclusions.empty()) return realize_conditional_conclusions(plan);
     const std::string lang = plan.language.empty() ? "pt" : plan.language;
 
+    const auto social = social_constructions(plan);
+    if (!social.empty()) return social.front();
     if (plan.intent == DialogIntent::GREET) {
         return (lang == "en")
             ? "Hello! I am ready to reason and learn new concepts with you."
@@ -323,6 +328,25 @@ std::string MorphologicalRealizer::realize(const SemanticPlan& plan) const {
 
         prev_subj = st.src;
         prev_obj = st.dst;
+    }
+
+    // Planned secondary route (if any). The planner only supplies a distinct,
+    // graph-grounded route; the connector marks it as an alternative rather
+    // than presenting it as another link in the causal chain.
+    for (size_t a = 0; a < plan.alternatives.size(); ++a) {
+        SemanticPlan secondary;
+        secondary.intent = plan.intent;
+        secondary.language = lang;
+        secondary.paths.push_back(plan.alternatives[a]);
+        auto text = MorphologicalRealizer{}.realize(secondary);
+        if (text.empty()) continue;
+        if (static_cast<unsigned char>(text[0]) < 128)
+            text[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(text[0])));
+        const bool contrast = a < plan.rhetorical_roles.size() &&
+            plan.rhetorical_roles[a + 1] == static_cast<uint8_t>(4);
+        if (!result.empty()) result += " ";
+        result += (lang == "en" ? (contrast ? "However, " : "Alternatively, ")
+                                : (contrast ? "Porém, " : "Alternativamente, ")) + text;
     }
 
     return result;

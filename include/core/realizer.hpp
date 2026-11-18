@@ -5,21 +5,46 @@
 #include "core/tsetlin.hpp"
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 namespace cognicore {
 
+struct ResourceAssessment {
+    std::string entity, capacity_surface, demand_surface;
+    uint64_t capacity_bytes = 0, demand_bytes = 0, episode_id = 0;
+    bool demand_known = false;
+    enum class Result { UNKNOWN, EXCEEDS, WITHIN } result = Result::UNKNOWN;
+};
 struct SemanticPlan {
     DialogIntent intent = DialogIntent::ANSWER_FACT;
     std::vector<CausalPath> paths;
+    /// Planned secondary routes. They are rendered after the main thesis with a
+    /// contrastive/additive discourse connector and never replace its content.
+    std::vector<CausalPath> alternatives;
+    std::vector<uint8_t> rhetorical_roles;
     std::vector<std::string> query_concepts;
     std::string language = "pt";
+    std::string tone = "natural";
+    std::vector<std::string> assumptions;
+    std::vector<std::pair<std::string, std::string>> conditional_conclusions;
+    /// Parallel to conditional_conclusions; values are ConditionKind.
+    std::vector<uint8_t> conditional_kinds;
+    std::optional<ResourceAssessment> resource;
+    std::optional<std::string> quoted_statement;
+    std::vector<uint32_t> evidence_edges;
+    std::vector<uint64_t> evidence_episodes;
 };
 
-/// Symbolic, model-independent representation for auditing and corpus export.
+/// Symbolic, model-independent representation for auditing and structural verification.
+std::string realize_conditional_conclusions(const SemanticPlan& plan);
+std::string realize_resource_assessment(const SemanticPlan& plan);
 std::string serialize_semantic_plan(const SemanticPlan& plan);
+
+/// Finite social constructions: combine lexical blocks, never retrieve corpus replies.
+std::vector<std::string> social_constructions(const SemanticPlan& plan);
 
 class ISurfaceRealizer {
 public:

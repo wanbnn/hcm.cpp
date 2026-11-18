@@ -143,10 +143,59 @@ std::string ConstructionGrammarRealizer::capitalize_first(std::string s) const {
     return s;
 }
 
+std::vector<std::string> social_constructions(const SemanticPlan& plan) {
+    std::vector<std::string> openings, continuations;
+    const bool en = plan.language == "en";
+    switch (plan.intent) {
+        case DialogIntent::GREET:
+            openings = en ? std::vector<std::string>{"Hello!", "Hi!"} : std::vector<std::string>{"Olá!", "Oi!"};
+            continuations = en ? std::vector<std::string>{" How can I help?", " What would you like to talk about?"}
+                               : std::vector<std::string>{" Em que posso ajudar?", " Sobre o que você quer conversar?"}; break;
+        case DialogIntent::THANK:
+            openings = en ? std::vector<std::string>{"You're welcome!", "Glad to help!"} : std::vector<std::string>{"De nada!", "Por nada!"};
+            continuations = en ? std::vector<std::string>{" We can continue whenever you like.", " What else would you like to discuss?"}
+                               : std::vector<std::string>{" Podemos continuar quando quiser.", " Quer conversar sobre mais alguma coisa?"}; break;
+        case DialogIntent::FAREWELL:
+            openings = en ? std::vector<std::string>{"See you!", "Goodbye!"} : std::vector<std::string>{"Até logo!", "Até mais!"};
+            continuations = en ? std::vector<std::string>{" We can pick this up another time."}
+                               : std::vector<std::string>{" Podemos retomar a conversa depois.", " Quando quiser, podemos continuar."}; break;
+        case DialogIntent::INTRODUCE:
+            openings = en ? std::vector<std::string>{"I am CogniCore.", "My name is CogniCore."}
+                          : std::vector<std::string>{"Sou o CogniCore.", "Meu nome é CogniCore."};
+            continuations = en ? std::vector<std::string>{" I use associative memory and symbolic rules."}
+                               : std::vector<std::string>{" Uso memória associativa e regras simbólicas.", " Posso relacionar fatos e aprender com a nossa conversa."}; break;
+        case DialogIntent::HELP:
+            openings = en ? std::vector<std::string>{"I can help you explore what is in memory."}
+                          : std::vector<std::string>{"Posso conversar e relacionar os fatos que conheço.", "Posso aprender uma informação que você me ensinar."};
+            continuations = en ? std::vector<std::string>{" Tell me what you need."}
+                               : std::vector<std::string>{" Diga em que você precisa de ajuda.", " Qual assunto você quer explorar?"}; break;
+        case DialogIntent::SMALLTALK:
+            openings = en ? std::vector<std::string>{"I am here and ready to talk."}
+                          : std::vector<std::string>{"Estou por aqui, pronto para conversar.", "Podemos conversar com calma."};
+            continuations = en ? std::vector<std::string>{" How are you?"}
+                               : std::vector<std::string>{" Como você está?", " O que você gostaria de compartilhar?"}; break;
+        default: return {};
+    }
+    std::vector<std::string> candidates;
+    for (const auto& opening : openings) for (const auto& continuation : continuations)
+        candidates.push_back(opening + continuation);
+    return candidates;
+}
+
 std::string ConstructionGrammarRealizer::realize(const SemanticPlan& plan) const {
     // All candidates are structural realizations of exactly the same steps.
     // Corpus statistics rank wording; they cannot select facts or change verbs.
+    if (plan.quoted_statement) return *plan.quoted_statement;
+    if (plan.resource) return realize_resource_assessment(plan);
+    if (!plan.conditional_conclusions.empty()) return realize_conditional_conclusions(plan);
     const MorphologicalRealizer morphology;
+    const auto social = social_constructions(plan);
+    if (!social.empty()) {
+        TextParser tokenizer;
+        return *std::max_element(social.begin(), social.end(), [&](const auto& a, const auto& b) {
+            return score_fluency(tokenizer.tokenize(a)) < score_fluency(tokenizer.tokenize(b));
+        });
+    }
     const auto base = morphology.realize(plan);
     if (plan.paths.empty() || plan.paths[0].steps.empty() ||
         plan.intent == DialogIntent::GREET || plan.intent == DialogIntent::AGREE ||
@@ -196,12 +245,59 @@ std::string ConstructionGrammarRealizer::realize(const SemanticPlan& plan) const
         const auto current = score_fluency(tokenizer.tokenize(candidate));
         if (current > score) { score = current; best = candidate; }
     }
+    if (!plan.alternatives.empty()) {
+        SemanticPlan secondary;
+        secondary.intent = plan.intent;
+        secondary.language = plan.language;
+        secondary.paths.push_back(plan.alternatives.front());
+        auto text = MorphologicalRealizer{}.realize(secondary);
+        if (!text.empty() && static_cast<unsigned char>(text[0]) < 128)
+            text[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(text[0])));
+        if (!text.empty() && best.find(text) == std::string::npos)
+            best += (english ? " Alternatively, " : " Alternativamente, ") + text;
+    }
     return best;
+}
+
+std::string realize_conditional_conclusions(const SemanticPlan& plan) {
+    std::string text;
+    for (size_t i = 0; i < plan.conditional_conclusions.size(); ++i) {
+        const auto& [antecedent, consequent] = plan.conditional_conclusions[i];
+        if (!text.empty()) text += " ";
+        const auto kind = i < plan.conditional_kinds.size()
+            ? static_cast<ConditionKind>(plan.conditional_kinds[i]) : ConditionKind::CONDITIONAL;
+        switch (kind) {
+            case ConditionKind::TEMPORAL: text += "Quando " + antecedent + ", " + consequent + "."; break;
+            case ConditionKind::CAUSAL: text += "Como " + antecedent + ", " + consequent + "."; break;
+            case ConditionKind::CONCESSIVE: text += "Embora " + antecedent + ", " + consequent + "."; break;
+            case ConditionKind::CONSECUTIVE: text += antecedent + ", portanto, " + consequent + "."; break;
+            case ConditionKind::CONDITIONAL:
+            default: text += "Se " + antecedent + ", então " + consequent + "."; break;
+        }
+    }
+    if (!plan.paths.empty()) {
+        auto continuation = plan;
+        continuation.conditional_conclusions.clear();
+        continuation.assumptions.clear();
+        text += " " + MorphologicalRealizer().realize(continuation);
+    }
+    return text;
+}
+
+std::string realize_resource_assessment(const SemanticPlan& plan) {
+    if (!plan.resource) return {};
+    const auto& r = *plan.resource;
+    std::string result = "Para " + r.entity + ", você informou " + r.capacity_surface + " de RAM. ";
+    if (r.result == ResourceAssessment::Result::UNKNOWN)
+        return result + "Ainda preciso saber quanta memória a operação exige. Se ela ultrapassar esse limite, a RAM será insuficiente; a demanda não foi informada.";
+    if (r.result == ResourceAssessment::Result::EXCEEDS)
+        return result + "Uma alocação de " + r.demand_surface + " excede essa capacidade. Não há RAM suficiente para manter essa alocação inteira ao mesmo tempo.";
+    return result + "Uma alocação de " + r.demand_surface + " não excede essa capacidade total. Isso não garante memória livre: o sistema e outros processos também consomem RAM.";
 }
 
 std::string serialize_semantic_plan(const SemanticPlan& plan) {
     std::ostringstream out;
-    out << "<PLAN> <LANG: " << plan.language << "> <INTENT: " << intent_to_string(plan.intent) << ">";
+    out << "<PLAN> <LANG: " << plan.language << "> <TONE: " << plan.tone << "> <INTENT: " << intent_to_string(plan.intent) << ">";
     if (!plan.paths.empty()) for (const auto& step : plan.paths[0].steps) {
         out << " <SUBJ: " << step.src << "> <REL: " << step.rel << "> <OBJ: " << step.dst << ">"
             << " <TENSE: " << unsigned(step.tense) << "> <SUBJ_GENDER: " << unsigned(step.src_gender)
@@ -209,6 +305,27 @@ std::string serialize_semantic_plan(const SemanticPlan& plan) {
             << "> <OBJ_NUMBER: " << unsigned(step.dst_number) << "> <TYPE: " << unsigned(step.type) << ">";
         if (step.negated) out << " <NEG: true>";
         if (!step.modality.empty()) out << " <MODAL: " << step.modality << ">";
+    }
+    for (const auto& path : plan.alternatives) for (const auto& step : path.steps) {
+        out << " <ALT_SUBJ: " << step.src << "> <ALT_REL: " << step.rel << "> <ALT_OBJ: " << step.dst << ">";
+        if (step.negated) out << " <ALT_NEG: true>";
+        if (!step.modality.empty()) out << " <ALT_MODAL: " << step.modality << ">";
+    }
+    for (size_t i = 0; i < plan.conditional_conclusions.size(); ++i) {
+        const auto& [a, b] = plan.conditional_conclusions[i];
+        out << " <IF: " << a << "> <THEN: " << b << ">";
+        if (i < plan.conditional_kinds.size())
+            out << " <IF_KIND: " << unsigned(plan.conditional_kinds[i]) << ">";
+    }
+    for (const auto& a : plan.assumptions) out << " <ASSUMPTION: " << a << ">";
+    for (auto id : plan.evidence_edges) out << " <EDGE_ID: " << id << ">";
+    for (auto id : plan.evidence_episodes) out << " <EPISODE_ID: " << id << ">";
+    if (plan.quoted_statement) out << " <QUOTE: " << *plan.quoted_statement << ">";
+    if (plan.resource) {
+        const auto& r = *plan.resource;
+        out << " <CTX: " << r.entity << "> <CAPACITY_BYTES: " << r.capacity_bytes << ">";
+        if (r.demand_known) out << " <DEMAND_BYTES: " << r.demand_bytes << ">";
+        out << " <RESOURCE_RESULT: " << (r.result == ResourceAssessment::Result::EXCEEDS ? "EXCEEDS" : r.result == ResourceAssessment::Result::WITHIN ? "WITHIN_TOTAL" : "UNKNOWN_DEMAND") << ">";
     }
     out << " </PLAN>";
     return out.str();

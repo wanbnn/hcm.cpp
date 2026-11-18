@@ -85,12 +85,19 @@ set(COGNICORE_SOURCES
     src/sdm.cpp
     src/tsetlin.cpp
     src/causal_graph.cpp
+    src/graph_mmap.cpp
     src/text_parser.cpp
     src/realizer.cpp
+    src/analogical_realizer.cpp
     src/morphological_realizer.cpp
     src/assistant.cpp
+    src/context_memory.cpp
+    src/discourse_planner.cpp
     src/code_ast.cpp
     src/code_synthesizer.cpp
+    src/episodic_memory.cpp
+    src/language_rules.cpp
+    src/math_solver.cpp
     src/model_bundle.cpp
 )
 
@@ -174,6 +181,11 @@ foreach(milestone 10_symbolic 11_assistant)
     target_compile_options(test_marco${milestone} PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)
     add_test(NAME test_marco${milestone} COMMAND test_marco${milestone})
 endforeach()
+
+add_executable(test_improvements tests/test_improvements.cpp)
+target_link_libraries(test_improvements PRIVATE cognicore_lib)
+target_compile_options(test_improvements PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)
+add_test(NAME test_improvements COMMAND test_improvements)
 
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)

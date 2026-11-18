@@ -29,6 +29,11 @@ const char* intent_to_string(DialogIntent intent) noexcept {
         case DialogIntent::AGREE:         return "AGREE";
         case DialogIntent::HYPOTHESIZE:   return "HYPOTHESIZE";
         case DialogIntent::GREET:         return "GREET";
+        case DialogIntent::THANK:         return "THANK";
+        case DialogIntent::FAREWELL:      return "FAREWELL";
+        case DialogIntent::INTRODUCE:     return "INTRODUCE";
+        case DialogIntent::HELP:          return "HELP";
+        case DialogIntent::SMALLTALK:     return "SMALLTALK";
         default:                          return "ANSWER_FACT";
     }
 }
@@ -41,6 +46,11 @@ DialogIntent string_to_intent(const std::string& s) noexcept {
     if (s == "AGREE")         return DialogIntent::AGREE;
     if (s == "HYPOTHESIZE")   return DialogIntent::HYPOTHESIZE;
     if (s == "GREET")         return DialogIntent::GREET;
+    if (s == "THANK")         return DialogIntent::THANK;
+    if (s == "FAREWELL")      return DialogIntent::FAREWELL;
+    if (s == "INTRODUCE")     return DialogIntent::INTRODUCE;
+    if (s == "HELP")          return DialogIntent::HELP;
+    if (s == "SMALLTALK")     return DialogIntent::SMALLTALK;
     return DialogIntent::ANSWER_FACT;
 }
 

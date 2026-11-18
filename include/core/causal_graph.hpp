@@ -70,6 +70,7 @@ struct CausalStep {
     GramNumber src_number = GramNumber::SING;
     GramGender dst_gender = GramGender::MASC;
     GramNumber dst_number = GramNumber::SING;
+    uint32_t edge_id = UINT32_MAX; // Snapshot-local provenance; never serialized as GraphEdge.
 };
 
 struct CausalPath {

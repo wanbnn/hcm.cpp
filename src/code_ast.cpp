@@ -166,6 +166,19 @@ std::string short_symbol_name(const std::string& s) {
     return s;
 }
 
+bool static_declaration(TSNode node, const std::string& src) {
+    const auto text = node_text(node, src);
+    const auto limit = std::min<size_t>(text.size(), 400);
+    return text.substr(0, limit).find("static ") != std::string::npos ||
+           text.substr(0, limit).find("static\t") != std::string::npos;
+}
+
+std::string signature_key(const CodeSymbol& symbol) {
+    std::string key = symbol.name + "#";
+    for (const auto& type : symbol.param_types) { key += type; key += ','; }
+    return key;
+}
+
 } // namespace
 
 const char* code_lang_to_string(CodeLanguage lang) noexcept {
@@ -210,23 +223,46 @@ HyperVector CodeGraph::encode_code_vsa(CodeLanguage lang,
 }
 
 uint32_t CodeGraph::add_or_update_symbol(CodeSymbol sym) {
+    const auto key = signature_key(sym);
+    if (auto exact = signature_to_id_.find(key); exact != signature_to_id_.end()) {
+        const uint32_t id = exact->second;
+        sym.id = id;
+        if (sym.body_snippet.empty()) sym.body_snippet = symbols_[id].body_snippet;
+        if (sym.return_type.empty()) sym.return_type = symbols_[id].return_type;
+        symbols_[id] = std::move(sym);
+        return id;
+    }
     auto it = name_to_id_.find(sym.name);
     if (it != name_to_id_.end()) {
         const uint32_t id = it->second;
-        sym.id = id;
-        // Preserve non-empty fields if updating declaration with definition
-        if (sym.body_snippet.empty()) sym.body_snippet = symbols_[id].body_snippet;
-        if (sym.return_type.empty()) sym.return_type = symbols_[id].return_type;
-        if (sym.param_types.empty()) {
-            sym.param_types = symbols_[id].param_types;
-            sym.param_names = symbols_[id].param_names;
+        auto& existing = symbols_[id];
+        // Merge declaration/definition pairs, but keep genuine overloads
+        // (same name, different non-empty parameter lists) as separate nodes.
+        const bool merge = existing.param_types == sym.param_types ||
+            existing.param_types.empty() || sym.param_types.empty();
+        if (merge) {
+            sym.id = id;
+            if (sym.body_snippet.empty()) sym.body_snippet = existing.body_snippet;
+            if (sym.return_type.empty()) sym.return_type = existing.return_type;
+            if (sym.param_types.empty()) {
+                sym.param_types = existing.param_types;
+                sym.param_names = existing.param_names;
+            }
+            existing = std::move(sym);
+            signature_to_id_[signature_key(existing)] = id;
+            return id;
         }
-        symbols_[id] = std::move(sym);
-        return id;
+        // genuine overload: append without replacing the primary name mapping
+        const uint32_t overload_id = static_cast<uint32_t>(symbols_.size());
+        sym.id = overload_id;
+        signature_to_id_[key] = overload_id;
+        symbols_.push_back(std::move(sym));
+        return overload_id;
     }
     const uint32_t id = static_cast<uint32_t>(symbols_.size());
     sym.id = id;
     name_to_id_.emplace(sym.name, id);
+    signature_to_id_[key] = id;
     symbols_.push_back(std::move(sym));
     return id;
 }
@@ -363,8 +399,11 @@ void CodeGraph::load_raw(std::vector<CodeSymbol> symbols,
     edges_ = std::move(edges);
     patterns_ = std::move(patterns);
     name_to_id_.clear();
+    signature_to_id_.clear();
     for (size_t i = 0; i < symbols_.size(); ++i) {
-        name_to_id_[symbols_[i].name] = static_cast<uint32_t>(i);
+        symbols_[i].id = static_cast<uint32_t>(i);
+        name_to_id_.emplace(symbols_[i].name, static_cast<uint32_t>(i));
+        signature_to_id_[signature_key(symbols_[i])] = static_cast<uint32_t>(i);
     }
 }
 
@@ -495,8 +534,14 @@ size_t TreeSitterCodeParser::ingest_source(const std::string& source_code,
                 extract_cpp_params(decl_node, source_code, sym.param_types, sym.param_names);
             }
             const auto owner_class = enclosing_class(node, source_code);
-            if (!owner_class.empty() && sym.name.find("::") == std::string::npos)
-                sym.name = owner_class + (lang == CodeLanguage::CPP ? "::" : ".") + sym.name;
+            if (!owner_class.empty()) {
+                sym.is_method = true;
+                sym.owner = owner_class;
+                sym.is_static = static_declaration(node, source_code) ||
+                    node_text(node, source_code).find("@staticmethod") != std::string::npos;
+                if (sym.name.find("::") == std::string::npos && sym.name.find('.') == std::string::npos)
+                    sym.name = owner_class + (lang == CodeLanguage::CPP ? "::" : ".") + sym.name;
+            }
             sym.includes_or_imports = file_includes;
             sym.body_snippet = node_text(node, source_code);
             sym.canonical_ast = canonical_ast(node);
@@ -561,8 +606,14 @@ size_t TreeSitterCodeParser::ingest_source(const std::string& source_code,
                 }
             }
             const auto owner_class = enclosing_class(node, source_code);
-            if (!owner_class.empty() && sym.name.find("::") == std::string::npos)
-                sym.name = owner_class + (lang == CodeLanguage::CPP ? "::" : ".") + sym.name;
+            if (!owner_class.empty()) {
+                sym.is_method = true;
+                sym.owner = owner_class;
+                sym.is_static = static_declaration(node, source_code) ||
+                    node_text(node, source_code).find("@staticmethod") != std::string::npos;
+                if (sym.name.find("::") == std::string::npos && sym.name.find('.') == std::string::npos)
+                    sym.name = owner_class + (lang == CodeLanguage::CPP ? "::" : ".") + sym.name;
+            }
             sym.includes_or_imports = file_includes;
             sym.body_snippet = node_text(node, source_code);
             sym.canonical_ast = canonical_ast(node);
@@ -625,8 +676,14 @@ size_t TreeSitterCodeParser::ingest_source(const std::string& source_code,
                 }
             }
             const auto owner_class = enclosing_class(node, source_code);
-            if (!owner_class.empty() && sym.name.find("::") == std::string::npos)
-                sym.name = owner_class + (lang == CodeLanguage::CPP ? "::" : ".") + sym.name;
+            if (!owner_class.empty()) {
+                sym.is_method = true;
+                sym.owner = owner_class;
+                sym.is_static = static_declaration(node, source_code) ||
+                    node_text(node, source_code).find("@staticmethod") != std::string::npos;
+                if (sym.name.find("::") == std::string::npos && sym.name.find('.') == std::string::npos)
+                    sym.name = owner_class + (lang == CodeLanguage::CPP ? "::" : ".") + sym.name;
+            }
             sym.includes_or_imports = file_includes;
             sym.body_snippet = node_text(node, source_code);
             sym.canonical_ast = canonical_ast(node);

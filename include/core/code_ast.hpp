@@ -42,6 +42,9 @@ struct CodeSymbol {
     std::string body_snippet;
     std::string file_path;
     CodeLanguage lang = CodeLanguage::CPP;
+    bool is_method = false;
+    bool is_static = false;
+    std::string owner;        // class/struct owner for methods
     HyperVector ast_vsa;      // Compositional VSA encoding of signature + AST roles
 };
 
@@ -98,6 +101,7 @@ public:
 
 private:
     std::unordered_map<std::string, uint32_t> name_to_id_;
+    std::unordered_map<std::string, uint32_t> signature_to_id_;
     std::vector<CodeSymbol> symbols_;
     std::vector<CodeEdge> edges_;
     std::vector<AstPattern> patterns_;

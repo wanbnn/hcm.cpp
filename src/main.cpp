@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -17,14 +18,16 @@ namespace {
 
 void print_usage() {
     std::cout << "Uso:\n"
-              << "  cognicore ingest-books --input <dir_ou_txt> --model <dir_modelo> [--parser rules|conllu] [--use-gpu]\n"
+              << "  cognicore ingest-books --input <dir_ou_txt> --model <dir_modelo> [--parser rules|conllu] [--style-only] [--use-gpu]\n"
               << "  cognicore train-dialogue --input <conversas.jsonl> --model <dir_modelo> [--epochs 20] [--use-gpu]\n"
+              << "  cognicore evaluate-dialogue --input <avaliacao.jsonl> --model <dir_modelo> [--out <metricas.json>]\n"
               << "  cognicore consolidate --model <dir_modelo>\n"
               << "  cognicore stats --model <dir_modelo>\n"
               << "  cognicore ingest-code --repo <dir> --model <dir_modelo> [--use-gpu]\n"
               << "  cognicore code --model <dir_modelo> --workspace <dir> --lang cpp|py|js --task <descrição>\n"
-              << "  cognicore export-realizer-dataset --model <dir_modelo> --out <pairs.jsonl>\n"
-              << "  cognicore chat --model <dir_modelo> [--workspace <dir>] [--realizer symbolic|morphological] [--lang cpp|py|js] [--debug]\n";
+              << "  cognicore train-realizer --model <dir_modelo> [--use-gpu]\n"
+              << "  cognicore evaluate-fluency --model <dir_modelo> --input <texto> [--out <relatorio.json>]\n"
+              << "  cognicore chat --model <dir_modelo> [--workspace <dir>] [--realizer strict|fluent] [--lang cpp|py|js] [--debug]\n";
 }
 
 std::string get_arg(int argc, char** argv, const std::string& flag, const std::string& def = "") {
@@ -57,13 +60,53 @@ std::string extract_json_str(const std::string& line, const std::string& key) {
     size_t colon = line.find(':', kpos + pat.size());
     if (colon == std::string::npos) return "";
     size_t q1 = line.find('"', colon + 1);
-    if (q1 == std::string::npos) return "";
-    size_t q2 = q1 + 1;
-    while (q2 < line.size()) {
-        if (line[q2] == '"' && line[q2 - 1] != '\\') break;
-        ++q2;
+    if (q1 == std::string::npos) throw std::invalid_argument("JSONL: expected a string");
+    std::string out;
+    auto utf8 = [&](uint32_t cp) {
+        if (cp <= 0x7f) out += char(cp);
+        else if (cp <= 0x7ff) { out += char(0xc0 | (cp >> 6)); out += char(0x80 | (cp & 63)); }
+        else if (cp <= 0xffff) { out += char(0xe0 | (cp >> 12)); out += char(0x80 | ((cp >> 6) & 63)); out += char(0x80 | (cp & 63)); }
+        else { out += char(0xf0 | (cp >> 18)); out += char(0x80 | ((cp >> 12) & 63)); out += char(0x80 | ((cp >> 6) & 63)); out += char(0x80 | (cp & 63)); }
+    };
+    auto hex4 = [&](size_t& at) {
+        uint32_t value = 0;
+        for (int n = 0; n < 4; ++n) {
+            if (++at >= line.size()) throw std::invalid_argument("JSONL: truncated unicode escape");
+            char c = line[at];
+            int digit = c >= '0' && c <= '9' ? c-'0' : c >= 'a' && c <= 'f' ? c-'a'+10 : c >= 'A' && c <= 'F' ? c-'A'+10 : -1;
+            if (digit < 0) throw std::invalid_argument("JSONL: invalid unicode escape");
+            value = (value << 4) | uint32_t(digit);
+        }
+        return value;
+    };
+    for (size_t at = q1 + 1; at < line.size(); ++at) {
+        char c = line[at];
+        if (c == '"') return out;
+        if (c != '\\') { out += c; continue; }
+        if (++at >= line.size()) break;
+        switch (line[at]) {
+            case '"': out += '"'; break;
+            case '\\': out += '\\'; break;
+            case '/': out += '/'; break;
+            case 'n': out += '\n'; break;
+            case 'r': out += '\r'; break;
+            case 't': out += '\t'; break;
+            case 'b': out += '\b'; break;
+            case 'f': out += '\f'; break;
+            case 'u': {
+                auto cp = hex4(at);
+                if (cp >= 0xd800 && cp <= 0xdbff) {
+                    if (at + 2 >= line.size() || line[at+1] != '\\' || line[at+2] != 'u') throw std::invalid_argument("JSONL: missing low surrogate");
+                    at += 2; auto low = hex4(at);
+                    if (low < 0xdc00 || low > 0xdfff) throw std::invalid_argument("JSONL: invalid low surrogate");
+                    cp = 0x10000 + ((cp-0xd800) << 10) + (low-0xdc00);
+                } else if (cp >= 0xdc00 && cp <= 0xdfff) throw std::invalid_argument("JSONL: unexpected low surrogate");
+                utf8(cp); break;
+            }
+            default: throw std::invalid_argument("JSONL: invalid escape");
+        }
     }
-    return line.substr(q1 + 1, q2 - q1 - 1);
+    throw std::invalid_argument("JSONL: unterminated string");
 }
 
 void load_rules_if_present(TextParser& parser) {
@@ -79,6 +122,10 @@ int cmd_ingest_books(int argc, char** argv) {
     const std::string model_dir = get_arg(argc, argv, "--model");
     const bool use_gpu = has_flag(argc, argv, "--use-gpu");
     const std::string parser_mode = get_arg(argc, argv, "--parser", "rules");
+    const bool style_only = has_flag(argc, argv, "--style-only");
+    const size_t max_vocab = std::stoul(get_arg(argc, argv, "--max-vocab", "0"));
+    const size_t context_stride = std::stoul(get_arg(argc, argv, "--context-stride", "1"));
+    if (!context_stride) throw std::invalid_argument("--context-stride deve ser positivo");
     if (parser_mode != "rules" && parser_mode != "conllu") {
         std::cerr << "Parser indisponível: use rules ou conllu (pré-processado).\n";
         return 1;
@@ -105,6 +152,7 @@ int cmd_ingest_books(int argc, char** argv) {
         files.push_back(input);
     }
 
+    std::sort(files.begin(), files.end());
     size_t total_triples = 0;
     for (const auto& fpath : files) {
         const std::string text = read_file_text(fpath);
@@ -114,15 +162,21 @@ int cmd_ingest_books(int argc, char** argv) {
             ? bundle.parser.parse_conllu(text) : bundle.parser.parse_text(text);
         for (const auto& s_toks : doc.sentences_tokens) {
             bundle.realizer.observe_sentence_tokens(s_toks);
-            for (size_t i = 0; i < s_toks.size(); ++i) {
+            for (size_t i = 0; i < s_toks.size(); i += context_stride) {
+                if (max_vocab && bundle.codebook.size() >= max_vocab && !bundle.codebook.contains(s_toks[i])) continue;
                 std::vector<std::string> ctx;
                 for (size_t j = (i >= 2 ? i - 2 : 0); j <= std::min(s_toks.size() - 1, i + 2); ++j) {
-                    if (i != j) ctx.push_back(s_toks[j]);
+                    if (i != j && (!max_vocab || bundle.codebook.size() < max_vocab || bundle.codebook.contains(s_toks[j]))) ctx.push_back(s_toks[j]);
                 }
                 bundle.codebook.observe_context(s_toks[i], ctx);
             }
         }
-        for (const auto& tr : doc.triples) {
+        if (fs::path(fpath).extension() != ".conllu") bundle.fluent_realizer.observe(text, bundle.parser, &doc);
+        else for (const auto& tokens : doc.sentences_tokens) {
+            std::string sentence; for (const auto& t : tokens) { if (!sentence.empty()) sentence += " "; sentence += t; }
+            bundle.fluent_realizer.observe(sentence, bundle.parser, &doc);
+        }
+        if (!style_only) for (const auto& tr : doc.triples) {
             bundle.graph.add_fact(tr.subject, tr.relation, tr.object, tr.type, tr.confidence, false,
                                   tr.negated, tr.tense, tr.modality, tr.subj_gender, tr.subj_number,
                                   tr.obj_gender, tr.obj_number);
@@ -131,7 +185,7 @@ int cmd_ingest_books(int argc, char** argv) {
             bundle.sdm.write(addr, data, use_gpu);
             ++total_triples;
         }
-        for (auto& pair : realizer_document_pairs(doc)) bundle.realizer_pairs.push_back(std::move(pair));
+        if (!style_only) for (auto& pair : realizer_document_pairs(doc)) bundle.realizer_pairs.push_back(std::move(pair));
         for (const auto& cf : doc.frames) {
             bundle.realizer.add_frame(cf);
         }
@@ -147,7 +201,8 @@ int cmd_ingest_books(int argc, char** argv) {
               << " | Vocabulario VSA: " << bundle.codebook.size()
               << " | Triplas extraidas: " << total_triples
               << " | Nos no grafo: " << bundle.graph.num_nodes()
-              << " | Frames: " << bundle.realizer.num_frames() << "\n";
+              << " | Frames: " << bundle.realizer.num_frames()
+              << " | Uso: " << (style_only ? "somente estilo/associação" : "fatos e estilo") << "\n";
     return 0;
 }
 
@@ -165,6 +220,16 @@ int cmd_train_dialogue(int argc, char** argv) {
     if (fs::exists(model_dir + "/codebook.bin")) {
         if (!bundle.load(model_dir, false)) { std::cerr << "Erro ao carregar modelo existente.\n"; return 1; }
     }
+    auto config = bundle.tsetlin.config();
+    const auto clauses = get_arg(argc, argv, "--clauses");
+    if (!clauses.empty() || config.num_classes < static_cast<size_t>(DialogIntent::COUNT)) {
+        config.num_classes = static_cast<size_t>(DialogIntent::COUNT);
+        if (!clauses.empty()) config.clauses_per_class = std::stoul(clauses);
+        if (!config.clauses_per_class || config.clauses_per_class > 512 || config.clauses_per_class % 2)
+            throw std::invalid_argument("--clauses deve ser par entre 2 e 512");
+        bundle.tsetlin = TsetlinMachine(config);
+        bundle.has_sparse_tsetlin = false;
+    }
     load_rules_if_present(bundle.parser);
 
     std::ifstream ifs(input);
@@ -181,9 +246,12 @@ int cmd_train_dialogue(int argc, char** argv) {
         std::string text = extract_json_str(line, "text");
         std::string intent_str = extract_json_str(line, "intent");
         if (text.empty()) continue;
+        if (intent_str != intent_to_string(string_to_intent(intent_str)))
+            throw std::invalid_argument("Intenção desconhecida: " + intent_str);
 
         auto toks = bundle.parser.tokenize(text);
         bundle.realizer.observe_sentence_tokens(toks);
+        bundle.fluent_realizer.observe(text, bundle.parser);
         for (auto& pair : realizer_document_pairs(bundle.parser.parse_text(text)))
             bundle.realizer_pairs.push_back(std::move(pair));
         X.push_back(bundle.encode_dialogue_features(text));
@@ -195,17 +263,78 @@ int cmd_train_dialogue(int argc, char** argv) {
         return 1;
     }
 
+    const size_t unique_examples = X.size();
+    if (has_flag(argc, argv, "--balance")) {
+        std::vector<std::vector<size_t>> by_class(static_cast<size_t>(DialogIntent::COUNT));
+        for (size_t i = 0; i < y.size(); ++i) by_class[y[i]].push_back(i);
+        size_t largest = 0;
+        for (const auto& values : by_class) largest = std::max(largest, values.size());
+        const auto original_x = X; const auto original_y = y;
+        for (const auto& values : by_class) if (!values.empty())
+            for (size_t i = values.size(); i < largest; ++i) {
+                const size_t index = values[i % values.size()];
+                X.push_back(original_x[index]); y.push_back(original_y[index]);
+            }
+    }
     bundle.tsetlin.fit(X, y, epochs, use_gpu);
     bundle.has_sparse_tsetlin = false;
+    TsetlinConfig context_config;
+    context_config.num_features = 16;
+    context_config.num_classes = static_cast<size_t>(DialogIntent::COUNT);
+    context_config.clauses_per_class = 64;
+    context_config.n_states = 30;
+    context_config.margin_T = 20;
+    TsetlinMachine context(context_config);
+    std::vector<std::vector<uint64_t>> context_x;
+    context_x.reserve(X.size());
+    for (const auto& row : X) context_x.push_back({row[VSA_WORDS]});
+    context.fit(context_x, y, std::max<size_t>(epochs, 12), false);
+    bundle.context_policy = context.export_sparse();
+    bundle.has_context_policy = true;
 
     if (!bundle.save(model_dir)) {
         std::cerr << "Erro ao salvar modelo em " << model_dir << "\n";
         return 1;
     }
 
-    std::cout << "[train-dialogue] Exemplos: " << X.size()
+    std::cout << "[train-dialogue] Exemplos únicos: " << unique_examples << " | Após balanceamento: " << X.size()
               << " | Epocas: " << epochs
               << " | GPU: " << (use_gpu && backend::is_gpu_available() ? "HIP/ROCm" : "CPU") << "\n";
+    return 0;
+}
+
+int cmd_evaluate_dialogue(int argc, char** argv) {
+    ModelBundle bundle;
+    const auto model = get_arg(argc, argv, "--model");
+    std::ifstream input(get_arg(argc, argv, "--input"));
+    if (model.empty() || !input || !bundle.load(model)) return 1;
+    const size_t classes = static_cast<size_t>(DialogIntent::COUNT);
+    std::vector<std::vector<size_t>> matrix(classes, std::vector<size_t>(classes));
+    size_t total = 0, correct = 0;
+    std::string line;
+    while (std::getline(input, line)) {
+        if (line.empty()) continue;
+        const auto text = extract_json_str(line, "text"), label = extract_json_str(line, "intent");
+        if (text.empty() || label != intent_to_string(string_to_intent(label))) return 1;
+        const size_t actual = static_cast<size_t>(string_to_intent(label));
+        const size_t predicted = static_cast<size_t>(bundle.classify_dialogue(text));
+        if (predicted >= classes) return 1;
+        ++matrix[actual][predicted]; ++total; correct += actual == predicted;
+    }
+    if (!total) return 1;
+    std::ostringstream report;
+    report << "{\"samples\":" << total << ",\"correct\":" << correct
+           << ",\"accuracy\":" << double(correct) / double(total) << ",\"confusion_matrix\":{";
+    for (size_t i = 0; i < classes; ++i) {
+        if (i) report << ',';
+        report << '\"' << intent_to_string(static_cast<DialogIntent>(i)) << "\":[";
+        for (size_t j = 0; j < classes; ++j) report << (j ? "," : "") << matrix[i][j];
+        report << ']';
+    }
+    report << "}}\n";
+    const auto output = get_arg(argc, argv, "--out");
+    if (!output.empty()) { std::ofstream file(output); if (!file) return 1; file << report.str(); }
+    std::cout << report.str();
     return 0;
 }
 
@@ -269,11 +398,49 @@ int cmd_stats(int argc, char** argv) {
               << "  Tsetlin clausulas      : " << active_clauses
               << " (modo=" << (bundle.has_sparse_tsetlin ? "esparso" : "denso") << ")\n"
               << "  Grafo Causal           : " << bundle.graph.num_nodes() << " nos, "
-              << bundle.graph.num_edges() << " arestas\n"
+              << bundle.graph.num_edges() << " arestas; mmap="
+              << ((bundle.mapped_graph && bundle.mapped_graph->valid()) ? "sim" : "nao") << "\n"
               << "  Realizador linguistico : " << bundle.realizer.num_frames() << " frames, "
               << bundle.realizer.num_ngrams() << " n-gramas\n"
+              << "  Fluencia DOP/PPM       : " << bundle.fluent_realizer.num_fragments() << " producoes, "
+              << bundle.fluent_realizer.ppm_contexts() << " contextos; treinado=" << bundle.fluent_realizer.ready()
+              << "; mmap=" << bundle.fluent_realizer.mapped() << "\n"
+              << "  Contexto discursivo    : " << bundle.context_memory.entities().size()
+              << " entidades, turno " << bundle.context_memory.turn() << "\n"
               << "  Tamanho em disco       : " << (disk_bytes / 1024.0) << " KB\n"
               << "  RAM estimada           : " << (ram_bytes / 1024.0) << " KB\n";
+    return 0;
+}
+
+int cmd_evaluate_fluency(int argc, char** argv) {
+    const auto model_path = get_arg(argc, argv, "--model");
+    const auto input = get_arg(argc, argv, "--input");
+    if (model_path.empty() || input.empty()) { print_usage(); return 1; }
+    ModelBundle bundle;
+    if (!bundle.load(model_path, true)) { std::cerr << "Erro ao carregar modelo.\n"; return 1; }
+    std::ifstream input_stream(input);
+    if (!input_stream) { std::cerr << "Arquivo de avaliação ausente.\n"; return 1; }
+    std::ostringstream buffer;
+    buffer << input_stream.rdbuf();
+    const auto text = buffer.str();
+    if (text.empty()) { std::cerr << "Arquivo de avaliação vazio.\n"; return 1; }
+    const auto evaluation = bundle.fluent_realizer.evaluate_text(text);
+    std::ostringstream report;
+    report << "{"
+           << "\"model\":\"" << json_escape(model_path) << "\","
+           << "\"input\":\"" << json_escape(input) << "\","
+           << "\"estimator\":\"PPM-C ordem 5 sem exclusão (calibração de relatório)\","
+           << "\"bits_per_byte\":" << std::setprecision(8) << evaluation.bits_per_byte << ","
+           << "\"perplexity\":" << evaluation.perplexity << ","
+           << "\"bytes\":" << evaluation.bytes << ","
+           << "\"ppm_contexts\":" << bundle.fluent_realizer.ppm_contexts() << ","
+           << "\"fragments\":" << bundle.fluent_realizer.num_fragments() << ","
+           << "\"trained\":" << (bundle.fluent_realizer.ready() ? "true" : "false") << ","
+           << "\"mapped\":" << (bundle.fluent_realizer.mapped() ? "true" : "false")
+           << "}\n";
+    const auto output = get_arg(argc, argv, "--out");
+    if (!output.empty()) { std::ofstream file(output); if (!file) return 1; file << report.str(); }
+    std::cout << report.str();
     return 0;
 }
 
@@ -300,13 +467,16 @@ int cmd_chat(int argc, char** argv) {
         TreeSitterCodeParser::ingest_directory(workspace, bundle.code_graph, &bundle.sdm);
         fs::create_directories(session_dir);
     }
-    const auto realizer = get_arg(argc, argv, "--realizer", "symbolic");
+    const auto realizer = get_arg(argc, argv, "--realizer", "fluent");
     MorphologicalRealizer morphology;
     const ISurfaceRealizer* mouth = nullptr;
-    if (realizer == "morphological") mouth = &morphology;
-    else if (realizer != "symbolic") {
-        std::cerr << "Realizador inválido: use symbolic ou morphological.\n"; return 1;
-    }
+    if (realizer == "strict") mouth = &morphology;
+    else if (realizer == "fluent") {
+        if (!bundle.fluent_realizer.ready()) {
+            std::cerr << "Realizador fluent ainda não treinado; usando strict. Execute train-realizer.\n";
+            mouth = &morphology;
+        } else mouth = &bundle.fluent_realizer;
+    } else { std::cerr << "Realizador inválido: use strict ou fluent.\n"; return 1; }
     AssistantSession session(bundle);
     const auto language = string_to_code_lang(get_arg(argc, argv, "--lang", "cpp"));
     if (language == CodeLanguage::UNKNOWN) { std::cerr << "Linguagem inválida.\n"; return 1; }
@@ -325,24 +495,9 @@ int cmd_chat(int argc, char** argv) {
         if (history) history << "{\"user\":\"" << json_escape(line) << "\",\"assistant\":\"" << json_escape(reply.text)
                              << "\",\"route\":\"" << route_name(reply.route) << "\"}\n" << std::flush;
         if (!bundle.save(session_dir)) { std::cerr << "Erro ao persistir sessão.\n"; return 1; }
+        bundle.refresh_mapped_graph(session_dir);
         if (debug) {
-            std::cout << "[DEBUG] Rota: " << route_name(reply.route) << " | Conceitos VSA: [";
-            for (size_t i = 0; i < trace.activated_concepts.size(); ++i) {
-                if (i > 0) std::cout << ", ";
-                std::cout << trace.activated_concepts[i];
-            }
-            std::cout << "] -> Intencao Tsetlin: [" << intent_to_string(trace.intent) << "]"
-                      << " -> Caminhos Grafo: " << trace.paths.size();
-            if (!trace.paths.empty()) {
-                std::cout << " (";
-                for (size_t i = 0; i < trace.paths[0].steps.size(); ++i) {
-                    const auto& st = trace.paths[0].steps[i];
-                    if (i > 0) std::cout << " -> ";
-                    std::cout << st.src << " -[" << st.rel << "]-> " << st.dst;
-                }
-                std::cout << ")";
-            }
-            std::cout << "\n";
+            std::cout << "[DEBUG] Rota: " << route_name(reply.route) << "\n" << trace.debug_report();
         }
         std::cout << "CogniCore> " << trace.response << "\n";
     }
@@ -375,16 +530,17 @@ int cmd_code(int argc, char** argv) {
     std::cout << result.code;
     return 0;
 }
-int cmd_export_pairs(int argc, char** argv) {
+int cmd_train_realizer(int argc, char** argv) {
     ModelBundle bundle;
     const auto model = get_arg(argc, argv, "--model");
-    const auto output = get_arg(argc, argv, "--out");
-    if (model.empty() || output.empty() || !bundle.load(model)) return 1;
-    std::ofstream out(output);
-    if (!out) return 1;
-    for (const auto& pair : bundle.realizer_pairs) out << pair << '\n';
-    std::cout << "Pares exportados: " << bundle.realizer_pairs.size() << "\n";
-    return out ? 0 : 1;
+    if (model.empty() || !bundle.load(model)) return 1;
+    const bool gpu = has_flag(argc, argv, "--use-gpu");
+    if (gpu && !backend::is_gpu_available()) { std::cerr << "GPU indisponível.\n"; return 1; }
+    bundle.fluent_realizer.train(gpu);
+    if (!bundle.save(model)) return 1;
+    std::cout << "Realizador DOP/PPM/Tsetlin treinado: " << bundle.fluent_realizer.num_fragments()
+              << " fragmentos, " << bundle.fluent_realizer.ppm_contexts() << " contextos PPM.\n";
+    return 0;
 }
 
 } // namespace
@@ -397,11 +553,13 @@ int run_cli(int argc, char** argv) {
     const std::string cmd = argv[1];
     if (cmd == "ingest-books")   return cmd_ingest_books(argc, argv);
     if (cmd == "train-dialogue") return cmd_train_dialogue(argc, argv);
+    if (cmd == "evaluate-dialogue") return cmd_evaluate_dialogue(argc, argv);
     if (cmd == "consolidate")    return cmd_consolidate(argc, argv);
     if (cmd == "stats")          return cmd_stats(argc, argv);
     if (cmd == "ingest-code") return cmd_ingest_code(argc, argv);
     if (cmd == "code") return cmd_code(argc, argv);
-    if (cmd == "export-realizer-dataset") return cmd_export_pairs(argc, argv);
+    if (cmd == "train-realizer") return cmd_train_realizer(argc, argv);
+    if (cmd == "evaluate-fluency") return cmd_evaluate_fluency(argc, argv);
     if (cmd == "chat" || cmd == "assistant")           return cmd_chat(argc, argv);
 
     print_usage();

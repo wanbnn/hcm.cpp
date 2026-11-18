@@ -11,7 +11,7 @@ const char* route_name(AssistantRoute route);
 class AssistantRouter {
 public:
     AssistantRouter();
-    AssistantRoute classify(const std::string& input, const ModelBundle& model) const;
+    AssistantRoute classify(const std::string& input, const ModelBundle& model, std::string* evidence = nullptr) const;
 private:
     TsetlinMachine router_;
 };
@@ -29,6 +29,8 @@ private:
     ModelBundle& model_;
     AssistantRouter router_;
     CodeSynthesizer synthesizer_;
+    AssistantRoute last_route_ = AssistantRoute::CONVERSATIONAL_GENERAL;
+    std::string last_code_task_;
 };
 std::string json_escape(const std::string& text);
 std::string realizer_pair_json(const ParsedTriple& triple);

@@ -1,0 +1,3 @@
+{"id": "fluency_0", "prompt": "Por que o atrito causa gelo?", "system_a": "O atrito gera o calor. Como resultado, o calor derrete o gelo.", "system_b": "O atrito gera o calor; entretanto, o calor derrete o gelo."}
+{"id": "fluency_1", "prompt": "Explique o que acontece quando a chuva causa umidade.", "system_a": "O chuva causa o umidade. Alternativamente, o umidade causa o corrosão.", "system_b": "O chuva causa o umidade. Alternativamente, o umidade causa o corrosão."}
+{"id": "fluency_2", "prompt": "O que o calor faz com o gelo?", "system_a": "O calor derrete o gelo.", "system_b": "O calor derrete o gelo."}

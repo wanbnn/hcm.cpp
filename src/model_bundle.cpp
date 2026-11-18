@@ -1,9 +1,15 @@
 #include "core/model_bundle.hpp"
 #include "core/morphological_realizer.hpp"
+#include "core/discourse_planner.hpp"
 #include "core/assistant.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <cstdio>
+#include <map>
+#include <sstream>
 #include <cstring>
+#include <unordered_set>
 #include <filesystem>
 #include <fstream>
 #include <fcntl.h>
@@ -14,6 +20,10 @@
 namespace fs = std::filesystem;
 
 namespace cognicore {
+
+ModelBundle::ModelBundle() {
+    language_rules.load_default();
+}
 
 namespace {
 
@@ -148,27 +158,125 @@ std::vector<uint64_t> ModelBundle::encode_dialogue_features(const std::string& u
         uint64_t ctx_bits = 0;
         if (user_text.find('?') != std::string::npos) ctx_bits |= (1ULL << 0);
         for (const auto& t : toks) {
-            if (t == "por" || t == "porque" || t == "causa" || t == "why") ctx_bits |= (1ULL << 1);
+            if (t == "porque" || t == "causa" || t == "why") ctx_bits |= (1ULL << 1);
             if (t == "o" || t == "que" || t == "qual" || t == "what") ctx_bits |= (1ULL << 2);
             if (t == "compare" || t == "diferenca" || t == "diferença" || t == "igual") ctx_bits |= (1ULL << 3);
             if (t == "se" || t == "hipotese" || t == "hipótese" || t == "if") ctx_bits |= (1ULL << 4);
             if (t == "ola" || t == "olá" || t == "oi" || t == "hello" || t == "hi") ctx_bits |= (1ULL << 5);
             if (graph.find_node(t) != UINT32_MAX) ctx_bits |= (1ULL << 6);
         }
+        const auto lower = TextParser::utf8_tolower(user_text);
+        auto has = [&](std::initializer_list<const char*> words) {
+            for (const auto* word : words) if (lower.find(word) != std::string::npos) return true;
+            return false;
+        };
+        if (lower.starts_with("bom dia") || lower.starts_with("boa tarde") || lower.starts_with("boa noite")) ctx_bits |= (1ULL << 5);
+        if (has({"por que", "por quê"})) ctx_bits |= (1ULL << 1);
+        if (has({"não entendi", "nao entendi", "explicar melhor", "esclareça", "esclareca", "de outro jeito", "não consegui entender"})) ctx_bits |= (1ULL << 12);
+        if (has({"concordo", "faz sentido", "exatamente"}) || lower == "sim" || lower.starts_with("sim,")) ctx_bits |= (1ULL << 13);
+        if (has({"obrigad", "valeu", "agradeç", "agradec", "thank"})) ctx_bits |= (1ULL << 7);
+        if (has({"tchau", "até logo", "até mais", "desped", "goodbye"})) ctx_bits |= (1ULL << 8);
+        if (has({"seu nome", "quem é você", "quem voce", "quem você", "se apresente", "your name", "who are you"})) ctx_bits |= (1ULL << 9);
+        if (has({"ajud", "pode fazer", "consegue fazer", "help"})) ctx_bits |= (1ULL << 10);
+        if (has({"tudo bem", "como você está", "como voce esta", "como vai", "conversar", "bater papo"})) ctx_bits |= (1ULL << 11);
         feats[VSA_WORDS] = ctx_bits;
     }
     return feats;
 }
 
+DialogIntent ModelBundle::classify_dialogue(const std::string& user_text) const {
+    const auto features = encode_dialogue_features(user_text);
+    const uint64_t specific = ((1ULL << 14) - 1) & ~((1ULL << 0) | (1ULL << 2) | (1ULL << 6));
+    if (has_context_policy && features.size() > VSA_WORDS && (features[VSA_WORDS] & specific))
+        return static_cast<DialogIntent>(context_policy.predict(&features[VSA_WORDS]));
+    const size_t predicted = has_sparse_tsetlin ? sparse_tsetlin.predict(features.data()) : tsetlin.predict(features.data());
+    return static_cast<DialogIntent>(predicted);
+}
+
 ModelBundle::InferenceTrace ModelBundle::infer_and_respond(const std::string& user_text, bool online_learn, const ISurfaceRealizer* surface) {
     InferenceTrace trace;
+    auto tick = std::chrono::steady_clock::now();
+    auto stage = [&](const std::string& name) {
+        const auto now = std::chrono::steady_clock::now();
+        trace.stage_ms.emplace_back(name, std::chrono::duration<double, std::milli>(now - tick).count());
+        tick = now;
+    };
     auto all_toks = parser.tokenize(user_text);
     auto content_toks = parser.extract_content_tokens(user_text);
+    const bool english_input = std::any_of(all_toks.begin(), all_toks.end(), [](const std::string& token) {
+        return token == "why" || token == "what" || token == "how" || token == "the" ||
+               token == "hello" || token == "is" || token == "does" || token == "and" || token == "the";
+    });
 
-    // Online one-shot learning if user states a declarative fact (no '?')
+    stage("PARSER");
+    const auto lower_input = TextParser::utf8_tolower(user_text);
+    const bool hypothetical = language_rules.is_hypothetical(lower_input);
+    std::string referent;
+    // Contextual memory resolves pronouns/deictics using salience, recency and
+    // grammatical agreement. Explicit mentions are already grounded by the
+    // topic-activation stage and do not need an anaphora substitution.
+    if (auto resolution = context_memory.resolve(user_text, parser)) {
+        std::ostringstream evidence;
+        evidence << "superfície '" << resolution->surface << "' -> "
+                 << (resolution->referent.empty() ? "[ambígua]" : resolution->referent)
+                 << " | " << resolution->reason << " | score=" << resolution->score;
+        if (resolution->candidates.size() > 1) {
+            evidence << " | candidatos:";
+            for (const auto& candidate : resolution->candidates) evidence << " " << candidate;
+        }
+        trace.context_evidence = evidence.str();
+        if (!resolution->ambiguous && resolution->surface != resolution->referent)
+            referent = resolution->referent;
+    }
+    // Legacy fallback: last unambiguous episodic fact for a deictic turn.
+    // This keeps older session files usable when context.bin is absent.
+    const bool deictic = std::find(all_toks.begin(), all_toks.end(), "lá") != all_toks.end() ||
+        std::find(all_toks.begin(), all_toks.end(), "ele") != all_toks.end() ||
+        std::find(all_toks.begin(), all_toks.end(), "ela") != all_toks.end() ||
+        lower_input.find("nesse servidor") != std::string::npos;
+    if (referent.empty() && deictic && !episodic_memory.facts().empty()) {
+        const auto& last = episodic_memory.facts().back();
+        // More than one entity in the last assertion is ambiguous.
+        bool ambiguous = false;
+        for (auto it = episodic_memory.facts().rbegin(); it != episodic_memory.facts().rend() && it->source == last.source; ++it)
+            if (it->entity != last.entity) ambiguous = true;
+        if (!ambiguous) referent = last.entity;
+    }
+    // Online one-shot learning if the user states a declarative fact, rule or
+    // conditional. Rules are stored separately from asserted graph edges.
     const bool is_question = (user_text.find('?') != std::string::npos);
     bool learned_fact = false;
-    if (online_learn && !is_question) {
+    const auto parsed_conditionals = parser.parse_text(user_text);
+    const bool is_rule = hypothetical || !parsed_conditionals.conditionals.empty();
+    if (online_learn && !is_question && is_rule) {
+        auto rule_property = [](const ParsedConditional& conditional) {
+            std::string property = "conditional_implies/";
+            property += TextParser::condition_kind_name(conditional.kind);
+            property += "/" + (conditional.quantifier.empty() ? std::string("-") : conditional.quantifier);
+            property += conditional.negated ? "/1" : "/0";
+            return property;
+        };
+        if (!parsed_conditionals.conditionals.empty()) {
+            for (const auto& conditional : parsed_conditionals.conditionals) {
+                episodic_memory.remember(conditional.antecedent, rule_property(conditional),
+                                         conditional.consequent, user_text);
+                learned_fact = true;
+            }
+        } else {
+            auto marker = lower_input.find(" então ");
+            size_t width = std::string(" então ").size();
+            if (marker == std::string::npos) { marker = lower_input.find(" then "); width = 6; }
+            if (marker != std::string::npos) {
+                auto antecedent = lower_input.substr(3, marker - 3);
+                auto consequent = lower_input.substr(marker + width);
+                while (!consequent.empty() && (consequent.back() == '.' || consequent.back() == ' ')) consequent.pop_back();
+                episodic_memory.remember(antecedent, "conditional_implies", consequent, user_text);
+                learned_fact = true;
+            }
+        }
+    }
+    const bool instruction_turn = language_rules.is_instruction_or_correction(lower_input);
+    if (online_learn && !is_question && !is_rule && !instruction_turn) {
         auto parsed = parser.parse_text(user_text);
         if (!parsed.triples.empty()) {
             for (const auto& tr : parsed.triples) {
@@ -180,6 +288,7 @@ ModelBundle::InferenceTrace ModelBundle::infer_and_respond(const std::string& us
                 HyperVector addr = HyperVector::from_token(tr.subject);
                 HyperVector data = HyperVector::from_token(tr.object);
                 sdm.write(addr, data);
+                episodic_memory.remember(tr.subject, tr.relation, tr.object, user_text);
                 learned_fact = true;
             }
             for (auto& pair : realizer_document_pairs(parsed)) realizer_pairs.push_back(std::move(pair));
@@ -189,7 +298,36 @@ ModelBundle::InferenceTrace ModelBundle::infer_and_respond(const std::string& us
         }
     }
 
-    // 1. VSA + SDM concept activation
+    // Explicit capacity assertions are episodic properties, not inferred machine specifications.
+    const bool negative_assertion = std::find(all_toks.begin(), all_toks.end(), "não") != all_toks.end() ||
+        std::find(all_toks.begin(), all_toks.end(), "nao") != all_toks.end() ||
+        std::find(all_toks.begin(), all_toks.end(), "not") != all_toks.end();
+    if (online_learn && !is_question && !hypothetical && !negative_assertion &&
+        lower_input.find("menos") == std::string::npos && lower_input.find("mais de") == std::string::npos &&
+        lower_input.find("cerca") == std::string::npos && lower_input.find("até") == std::string::npos &&
+        (lower_input.find("ram") != std::string::npos || lower_input.find("memória") != std::string::npos)) {
+        if (const auto quantity = parse_memory_quantity(lower_input)) {
+            auto end = lower_input.find(" só tem ");
+            if (end == std::string::npos) end = lower_input.find(" tem ");
+            if (end != std::string::npos) {
+                auto entity = lower_input.substr(0, end);
+                if (entity.starts_with("meu ")) entity.erase(0, 4);
+                if (entity.starts_with("minha ")) entity.erase(0, 6);
+                episodic_memory.remember(entity, "ram_capacity", quantity->surface, user_text);
+                context_memory.observe_entity(entity, TextParser::infer_gender(entity), TextParser::infer_number(entity));
+                learned_fact = true;
+            }
+        }
+    }
+    if (!referent.empty()) trace.resolved_reference = "recência discursiva -> " + referent;
+    for (auto it = episodic_memory.facts().rbegin(); it != episodic_memory.facts().rend(); ++it) {
+        if (it->property != "ram_capacity") continue;
+        if (referent != it->entity && lower_input.find(it->entity) == std::string::npos) continue;
+        auto recalled = episodic_memory.recall(it->entity, it->property);
+        if (recalled) trace.recalled_episodes.push_back(*recalled);
+        break;
+    }
+    // 1. VSA + SDM topic activation
     for (const auto& t : content_toks) {
         if (graph.find_node(t) != UINT32_MAX) {
             trace.activated_concepts.push_back(t);
@@ -203,9 +341,27 @@ ModelBundle::InferenceTrace ModelBundle::infer_and_respond(const std::string& us
         }
     }
 
-    // Query SDM associative memory for related concepts
-    if (!content_toks.empty()) {
+    // Ground partial nominal phrases before associative expansion. An unanchored
+    // top-K SDM read always returns something, even for unrelated/OOV questions.
+    if (trace.activated_concepts.empty()) {
+        for (const auto& node : graph.nodes()) {
+            const auto space = node.name.find(' ');
+            if (space == std::string::npos) continue;
+            const auto head = node.name.substr(0, space);
+            if (std::find(content_toks.begin(), content_toks.end(), head) != content_toks.end())
+                trace.activated_concepts.push_back(node.name);
+        }
+    }
+    // Concepts grounded directly in the user turn. SDM expansion below is a
+    // recall hint; graph reasoning must start from what the user actually said
+    // (plus explicit contextual carry-over), never from an unrelated expanded
+    // concept that happens to have a high-confidence edge.
+    const auto grounded_concepts = trace.activated_concepts;
+    // SDM expands grounded concepts; it is not evidence for an arbitrary topic.
+    if (!content_toks.empty() && !trace.activated_concepts.empty()) {
         HyperVector q_hv = codebook.encode_bag(content_toks, true);
+        trace.active_slots = sdm.activate(q_hv);
+        for (auto slot : trace.active_slots) trace.slot_distances.push_back(q_hv.hamming(sdm.addresses()[slot]));
         HyperVector recalled = sdm.read(q_hv);
         auto near = codebook.query_nearest(recalled, 3, true);
         for (const auto& [cand, sim] : near) {
@@ -218,39 +374,318 @@ ModelBundle::InferenceTrace ModelBundle::infer_and_respond(const std::string& us
         }
     }
 
+    if (!referent.empty() && graph.find_node(referent) != UINT32_MAX)
+        trace.activated_concepts.push_back(referent);
+    // Topic carry-over: a follow-up that introduces no known topic inherits
+    // the last salient topic, but only when an explicit follow-up cue is present.
+    const auto carried = context_memory.carryover_concepts(user_text, parser, graph);
+    for (const auto& topic : carried) {
+        if (graph.find_node(topic) == UINT32_MAX) continue;
+        if (std::find(trace.activated_concepts.begin(), trace.activated_concepts.end(), topic) ==
+            trace.activated_concepts.end()) {
+            trace.activated_concepts.push_back(topic);
+            trace.carried_concepts.push_back(topic);
+        }
+    }
+    stage("VSA_SDM_EPISODIOS");
     // 2. Tsetlin Machine dialog intent
     if (learned_fact) {
         trace.intent = DialogIntent::AGREE;
     } else {
-        auto feats = encode_dialogue_features(user_text);
-        size_t pred = has_sparse_tsetlin
-            ? sparse_tsetlin.predict(feats.data())
-            : tsetlin.predict(feats.data());
-        trace.intent = static_cast<DialogIntent>(pred);
+        trace.intent = classify_dialogue(user_text);
     }
 
+    const auto features = encode_dialogue_features(user_text);
+    const uint64_t specific = ((1ULL << 14) - 1) & ~((1ULL << 0) | (1ULL << 2) | (1ULL << 6));
+    const bool context = has_context_policy && features.size() > VSA_WORDS && (features[VSA_WORDS] & specific);
+    const auto policy = context ? context_policy : has_sparse_tsetlin ? sparse_tsetlin : tsetlin.export_sparse();
+    const auto* bits = context ? &features[VSA_WORDS] : features.data();
+    trace.policy_source = context ? "context_policy" : has_sparse_tsetlin ? "sparse_tsetlin" : "tsetlin_export";
+    trace.class_votes = policy.score_classes(bits);
+    for (size_t i = 0; i < policy.clauses.size(); ++i) {
+        const auto& clause = policy.clauses[i];
+        bool active = true;
+        for (auto f : clause.pos_literals) if (!(bits[f / 64] & (1ULL << (f % 64)))) active = false;
+        for (auto f : clause.neg_literals) if (bits[f / 64] & (1ULL << (f % 64))) active = false;
+        if (active) { trace.fired_clauses.push_back(i); trace.fired_literals.push_back(clause); }
+    }
+    if (learned_fact) trace.decision_override = "AGREE: fato aprendido neste turno";
+    stage("TSETLIN");
     // 3. Causal Graph multi-hop reasoning
-    if (!trace.activated_concepts.empty()) {
-        trace.paths = graph.find_paths(trace.activated_concepts, 3, 5, &codebook);
+    std::vector<std::string> reasoning_seeds = grounded_concepts;
+    for (const auto& topic : trace.carried_concepts)
+        if (std::find(reasoning_seeds.begin(), reasoning_seeds.end(), topic) == reasoning_seeds.end())
+            reasoning_seeds.push_back(topic);
+    if (!referent.empty() && std::find(reasoning_seeds.begin(), reasoning_seeds.end(), referent) == reasoning_seeds.end())
+        reasoning_seeds.push_back(referent);
+    if (learned_fact) mapped_graph.reset();
+    if (!reasoning_seeds.empty()) {
+        std::vector<CausalPath> candidates;
+        if (mapped_graph && mapped_graph->valid())
+            candidates = mapped_graph->find_paths(reasoning_seeds, 3, 5);
+        if (candidates.empty())
+            candidates = graph.find_paths(reasoning_seeds, 3, 5, &codebook);
+        // Explicit relation questions ("O que derrete o gelo?", "O que o calor
+        // aquece?") are directional. Ask the graph for the requested relation
+        // instead of relying only on generic path ranking.
+        std::vector<CausalPath> explicit_paths;
+        auto query_direct = [&](const std::string& name) {
+            if (mapped_graph && mapped_graph->valid()) return mapped_graph->query_direct(name, 16);
+            return graph.query_direct(name, 16);
+        };
+        for (size_t ti = 0; ti < all_toks.size(); ++ti) {
+            const auto lemma = TextParser::lemmatize_simple(all_toks[ti]);
+            const bool known_relation = std::find(graph.relations().begin(), graph.relations().end(), lemma) != graph.relations().end();
+            if (!known_relation) continue;
+            for (const auto& seed : reasoning_seeds) {
+                const auto seed_token = parser.tokenize(seed);
+                if (seed_token.empty()) continue;
+                const auto seed_at = std::find(all_toks.begin(), all_toks.end(), seed_token.front());
+                if (seed_at == all_toks.end()) continue;
+                const size_t seed_position = static_cast<size_t>(seed_at - all_toks.begin());
+                for (const auto& step : query_direct(seed)) {
+                    if (TextParser::lemmatize_simple(step.rel) != lemma) continue;
+                    const bool outgoing = seed_position < ti && step.src == seed;
+                    const bool incoming = seed_position > ti && step.dst == seed;
+                    if (!outgoing && !incoming) continue;
+                    CausalPath path;
+                    path.steps.push_back(step);
+                    path.score = 50.0f + step.confidence;
+                    explicit_paths.push_back(std::move(path));
+                }
+            }
+        }
+        if (!explicit_paths.empty()) {
+            candidates.insert(candidates.begin(), explicit_paths.begin(), explicit_paths.end());
+        }
+        const auto discourse = DiscoursePlanner{}.plan(candidates, trace.intent, hypothetical, reasoning_seeds);
+        trace.paths = discourse.paths;
+        trace.alternatives = discourse.alternatives;
+        trace.rhetorical_roles.clear();
+        for (const auto role : discourse.roles)
+            trace.rhetorical_roles.push_back(static_cast<uint8_t>(role));
+        trace.planning_evidence = discourse.rationale;
     }
 
+    for (const auto& path : trace.paths) for (const auto& step : path.steps)
+        if (step.edge_id != UINT32_MAX && std::find(trace.edge_ids.begin(), trace.edge_ids.end(), step.edge_id) == trace.edge_ids.end())
+            trace.edge_ids.push_back(step.edge_id);
+    stage("GRAFO");
+    // Conditional rules remain separate from asserted graph edges. Match every
+    // content literal, including negative markers, before deriving a consequent.
+    std::vector<EpisodicRecall> applied_rules;
+    std::map<uint64_t, ConditionKind> applied_rule_kinds;
+    for (const auto& rule : episodic_memory.facts()) {
+        if (!rule.property.starts_with("conditional_implies")) continue;
+        // Property layout: conditional_implies/<KIND>/<QUANT>/<NEGATED>.
+        ConditionKind kind = ConditionKind::CONDITIONAL;
+        std::string quantifier;
+        bool rule_negated = false;
+        {
+            const auto first = rule.property.find('/');
+            if (first != std::string::npos) {
+                const auto second = rule.property.find('/', first + 1);
+                const auto third = rule.property.find('/', second == std::string::npos ? first + 1 : second + 1);
+                const auto kind_text = second == std::string::npos ? std::string{}
+                    : rule.property.substr(first + 1, second - first - 1);
+                if (kind_text == "TEMPORAL") kind = ConditionKind::TEMPORAL;
+                else if (kind_text == "CAUSAL") kind = ConditionKind::CAUSAL;
+                else if (kind_text == "CONCESSIVE") kind = ConditionKind::CONCESSIVE;
+                else if (kind_text == "CONSECUTIVE") kind = ConditionKind::CONSECUTIVE;
+                if (second != std::string::npos) {
+                    const auto end = third == std::string::npos ? rule.property.size() : third;
+                    quantifier = rule.property.substr(second + 1, end - second - 1);
+                    if (quantifier == "-") quantifier.clear();
+                }
+                if (third != std::string::npos) rule_negated = rule.property.substr(third + 1) == "1";
+            }
+        }
+        const bool applicable_context = (hypothetical && is_question) ||
+            ((kind == ConditionKind::CAUSAL || kind == ConditionKind::CONCESSIVE) && is_question);
+        if (!applicable_context) continue;
+        auto required = parser.extract_content_tokens(rule.entity);
+        required.erase(std::remove_if(required.begin(), required.end(), [&](const std::string& token) {
+            return std::find(language_rules.quantifier_words.begin(), language_rules.quantifier_words.end(), token) !=
+                   language_rules.quantifier_words.end();
+        }), required.end());
+        for (const auto& token : parser.tokenize(rule.entity))
+            if (token == "sem" || token == "não" || token == "nao" || token == "not" ||
+                token == "without" || token == "com" || token == "with" || token == "nunca")
+                required.push_back(token);
+        bool match = !required.empty();
+        if (match && (quantifier == "ANY" || quantifier == "SOME")) {
+            match = false;
+            for (const auto& token : required)
+                if (std::find(all_toks.begin(), all_toks.end(), token) != all_toks.end()) { match = true; break; }
+        } else {
+            for (const auto& token : required)
+                if (std::find(all_toks.begin(), all_toks.end(), token) == all_toks.end()) match = false;
+        }
+        // Do not apply a positive premise to an explicitly negated question.
+        const auto premise_tokens = parser.tokenize(rule.entity);
+        for (const auto* neg : {"não", "nao", "not"})
+            if (std::find(all_toks.begin(), all_toks.end(), neg) != all_toks.end() &&
+                std::find(premise_tokens.begin(), premise_tokens.end(), neg) == premise_tokens.end()) match = false;
+        if (!match) continue;
+        if (auto recalled = episodic_memory.recall(rule.entity, rule.property)) {
+            if (std::any_of(applied_rules.begin(), applied_rules.end(), [&](const auto& r) { return r.fact.id == recalled->fact.id; })) continue;
+            applied_rule_kinds[recalled->fact.id] = kind;
+            applied_rules.push_back(*recalled);
+            trace.recalled_episodes.push_back(*recalled);
+        }
+        (void)rule_negated;
+    }
     // 4. Surface Realizer compositional synthesis
     SemanticPlan plan;
     plan.intent = trace.intent;
     plan.paths = trace.paths;
-    for (const auto& token : all_toks)
-        if (token == "why" || token == "what" || token == "how" || token == "the" || token == "hello") plan.language = "en";
+    plan.alternatives = trace.alternatives;
+    plan.rhetorical_roles = trace.rhetorical_roles;
+    for (const auto& rule : applied_rules) {
+        plan.conditional_conclusions.emplace_back(rule.fact.entity, rule.fact.value);
+        const auto kind = applied_rule_kinds.find(rule.fact.id);
+        plan.conditional_kinds.push_back(kind == applied_rule_kinds.end()
+            ? static_cast<uint8_t>(ConditionKind::CONDITIONAL) : static_cast<uint8_t>(kind->second));
+        const auto tails = graph.find_paths({rule.fact.value}, 3, 1, &codebook);
+        if (applied_rules.size() == 1) plan.paths = tails;
+        else plan.paths.clear();
+        plan.alternatives.clear();
+        plan.rhetorical_roles.clear();
+        plan.intent = DialogIntent::EXPLAIN_CAUSE;
+    }
+    plan.language = english_input ? "en" : "pt";
     plan.query_concepts = trace.activated_concepts.empty() ? content_toks : trace.activated_concepts;
-    trace.response = surface ? surface->realize(plan) : realizer.realize(plan);
+    if (trace.activated_concepts.empty()) {
+        const auto lower = TextParser::utf8_tolower(user_text);
+        if (auto at = lower.find(" sobre "); at != std::string::npos)
+            plan.query_concepts = parser.extract_content_tokens(lower.substr(at + 7));
+    }
+    if (hypothetical) plan.assumptions.push_back(user_text);
+    plan.evidence_edges = trace.edge_ids;
+    for (const auto& recalled : trace.recalled_episodes) plan.evidence_episodes.push_back(recalled.fact.id);
+    if (!trace.recalled_episodes.empty() && !negative_assertion &&
+        (lower_input.find("carregar") != std::string::npos || lower_input.find("alocar") != std::string::npos || lower_input.find("caber") != std::string::npos)) {
+        const auto& remembered = trace.recalled_episodes.front().fact;
+        if (remembered.property == "ram_capacity") if (const auto capacity = parse_memory_quantity(remembered.value)) {
+            ResourceAssessment r;
+            r.entity = remembered.entity; r.capacity_bytes = capacity->bytes;
+            r.capacity_surface = remembered.value; r.episode_id = remembered.id;
+            if (const auto demand = parse_memory_quantity(lower_input)) {
+                r.demand_known = true; r.demand_bytes = demand->bytes; r.demand_surface = demand->surface;
+                r.result = r.demand_bytes > r.capacity_bytes ? ResourceAssessment::Result::EXCEEDS : ResourceAssessment::Result::WITHIN;
+            }
+            plan.resource = r;
+            // Capacity arithmetic cannot prove swap/OOM or mmap behavior.
+            plan.paths.clear(); plan.alternatives.clear(); plan.rhetorical_roles.clear(); plan.evidence_edges.clear();
+            plan.conditional_conclusions.clear();
+            plan.conditional_kinds.clear();
+            plan.evidence_episodes = {remembered.id};
+        }
+    }
+    // Provenance refers to the selected plan, including conditional continuations.
+    plan.evidence_edges.clear();
+    for (const auto& path : plan.paths) for (const auto& step : path.steps)
+        if (step.edge_id != UINT32_MAX && std::find(plan.evidence_edges.begin(), plan.evidence_edges.end(), step.edge_id) == plan.evidence_edges.end())
+            plan.evidence_edges.push_back(step.edge_id);
+    if (lower_input.starts_with("olá") || lower_input == "oi" || lower_input.starts_with("oi,") || lower_input.starts_with("hello")) {
+        plan.intent = DialogIntent::GREET;
+        trace.decision_override = "GREET: construção explícita de saudação";
+    }
+    if (lower_input.find("o que eu disse") != std::string::npos || lower_input.find("what did i say") != std::string::npos) {
+        plan = SemanticPlan{};
+        plan.quoted_statement = episodes.empty() ? "Ainda não há episódios anteriores nesta sessão." : episodes.back().first;
+        trace.decision_override = "consulta literal ao diário; sem inferência associativa";
+        for (auto it = episodic_memory.facts().rbegin(); it != episodic_memory.facts().rend(); ++it) {
+            if (it->source != *plan.quoted_statement) continue;
+            if (const auto recalled = episodic_memory.recall(it->entity, it->property)) {
+                trace.recalled_episodes.push_back(*recalled);
+                plan.evidence_episodes.push_back(it->id);
+                plan.quoted_statement = recalled->fact.source;
+                trace.decision_override = "citação de episódio recuperado e verificado na SDM";
+            }
+            break;
+        }
+    }
+    trace.plan = plan;
+    stage("PLANO");
+    if (const auto* fluent = dynamic_cast<const AnalogicalFluencyRealizer*>(surface)) {
+        const auto derivation = fluent->derive(plan);
+        trace.response = derivation.candidates[derivation.selected].text;
+        std::ostringstream audit;
+        audit << "candidatas=" << derivation.candidates.size() << " selecionada=" << derivation.selected << " fragmentos recuperados=";
+        for (auto id : derivation.retrieved_fragments) audit << id << ",";
+        audit << " slots SDM="; for (auto id : derivation.active_slots) audit << id << ",";
+        for (size_t i = 0; i < derivation.candidates.size(); ++i) {
+            const auto& c = derivation.candidates[i];
+            audit << "\n  #" << i << " PPM_Q16=" << c.ppm_cost_q16 << " voto_estilo=" << c.style_vote << " rank_Q16=" << c.rank_q16 << " fragmentos=";
+            for (auto id : c.fragment_ids) audit << id << ",";
+        }
+        trace.fluency_evidence = audit.str();
+    } else trace.response = surface ? surface->realize(plan) : realizer.realize(plan);
+    stage("REALIZADOR");
 
+    // Persist the short-term discourse state for the next turn.
+    context_memory.observe_concepts(trace.activated_concepts);
+    context_memory.observe_user_turn(user_text, parser, graph);
     return trace;
+}
+
+std::string ModelBundle::InferenceTrace::debug_report() const {
+    std::ostringstream out;
+    out << "[ROTEADOR TSETLIN] " << router_evidence << "\n";
+    for (const auto& [stage, ms] : stage_ms) out << "[" << stage << "] " << ms << " ms\n";
+    out << "[VSA] conceitos:";
+    for (const auto& c : activated_concepts) out << " [" << c << "]";
+    out << "\n[SDM] slots reais (id:distância Hamming):";
+    for (size_t i = 0; i < active_slots.size(); ++i) out << " " << active_slots[i] << ":" << slot_distances[i];
+    out << "\n[REFERENCIA] " << (resolved_reference.empty() ? "nenhuma resolução" : resolved_reference);
+    if (!context_evidence.empty()) out << "\n[CONTEXTO] " << context_evidence;
+    if (!carried_concepts.empty()) {
+        out << "\n[CONTEXTO] tópico herdado:";
+        for (const auto& topic : carried_concepts) out << " [" << topic << "]";
+    }
+    for (const auto& e : recalled_episodes) {
+        out << "\n[EPISODIO #" << e.fact.id << "] " << e.fact.entity << " / " << e.fact.property
+            << " = " << e.fact.value << " | similaridade SDM=" << e.similarity << " | slots=";
+        for (auto slot : e.active_slots) out << slot << ",";
+        out << " | fonte: " << e.fact.source;
+    }
+    out << "\n[TSETLIN] modelo=" << policy_source << " intenção=" << intent_to_string(intent) << " votos:";
+    for (size_t i = 0; i < class_votes.size(); ++i) out << " " << i << "=" << class_votes[i];
+    out << "\n[TSETLIN] cláusulas disparadas=" << fired_clauses.size() << " (primeiras 16; índices globais)";
+    for (size_t i = 0; i < std::min<size_t>(16, fired_clauses.size()); ++i) {
+        out << "\n  #" << fired_clauses[i] << " sinal=" << int(fired_literals[i].sign) << " IF";
+        for (auto f : fired_literals[i].pos_literals) out << " x[" << f << "]";
+        for (auto f : fired_literals[i].neg_literals) out << " !x[" << f << "]";
+        if (fired_literals[i].pos_literals.empty() && fired_literals[i].neg_literals.empty()) out << " TRUE (vazia)";
+    }
+    if (!decision_override.empty()) out << "\n[POLITICA EXPLICITA] " << decision_override;
+    out << "\n[PLANEJAMENTO] " << (planning_evidence.empty() ? "sem caminho" : planning_evidence);
+    out << "\n[GRAFO] arestas reais:";
+    for (auto id : edge_ids) out << " " << id;
+    for (const auto& p : paths) for (const auto& step : p.steps)
+        out << "\n  " << step.src << " --" << (step.negated ? "NOT " : "") << step.rel << "--> " << step.dst << " conf=" << step.confidence;
+    if (!fluency_evidence.empty()) out << "\n[FLUENCIA DOP/PPM/TSETLIN] " << fluency_evidence;
+    if (!code_evidence.empty()) out << "\n[CODIGO] " << code_evidence;
+    out << "\n[PLANO ANTES DO REALIZADOR] " << serialize_semantic_plan(plan) << "\n";
+    return out.str();
 }
 
 bool ModelBundle::save(const std::string& dir_path) const {
     std::error_code ec;
     fs::create_directories(dir_path, ec);
     if (ec) return false;
+    if (!language_rules.save(dir_path + "/language_rules.json")) return false;
 
+    {
+        BinaryWriter w(dir_path + "/episodic_facts.bin");
+        if (!w.ok()) return false;
+        w.write_pod(uint32_t(0x45504631)); w.write_pod(uint32_t(episodic_memory.facts().size()));
+        for (const auto& f : episodic_memory.facts()) {
+            w.write_string(f.entity); w.write_string(f.property); w.write_string(f.value); w.write_string(f.source);
+        }
+    }
+    if (!fluent_realizer.save(dir_path + "/fluency.bin")) return false;
     // 1. Codebook
     {
         BinaryWriter w(dir_path + "/codebook.bin");
@@ -312,6 +747,21 @@ bool ModelBundle::save(const std::string& dir_path) const {
         }
     }
 
+    {
+        BinaryWriter w(dir_path + "/dialogue_context.bin");
+        if (!w.ok()) return false;
+        w.write_pod(uint32_t(0x43545831)); w.write_pod(uint8_t(has_context_policy));
+        if (has_context_policy) {
+            w.write_pod(uint32_t(context_policy.num_features)); w.write_pod(uint32_t(context_policy.num_classes));
+            w.write_pod(uint32_t(context_policy.clauses_per_class));
+            for (const auto& clause : context_policy.clauses) {
+                w.write_pod(clause.sign); w.write_pod(uint32_t(clause.pos_literals.size())); w.write_pod(uint32_t(clause.neg_literals.size()));
+                w.write_bytes(clause.pos_literals.data(), clause.pos_literals.size() * sizeof(uint16_t));
+                w.write_bytes(clause.neg_literals.data(), clause.neg_literals.size() * sizeof(uint16_t));
+            }
+        }
+    }
+
     // 4. Causal Graph
     {
         BinaryWriter w(dir_path + "/graph.bin");
@@ -337,12 +787,13 @@ bool ModelBundle::save(const std::string& dir_path) const {
             w.write_bytes(graph.edges().data(), ne * sizeof(GraphEdge));
         }
     }
+    if (!MappedCausalGraph::write(dir_path + "/graph_mmap.bin", graph)) return false;
 
     // Optional Phase-2 code index, independent of the legacy model files.
     {
         BinaryWriter w(dir_path + "/code_index.bin");
         if (!w.ok()) return false;
-        w.write_pod(uint32_t(0x434F4432));
+        w.write_pod(uint32_t(0x434F4433));
         auto strings = [&](const std::vector<std::string>& values) {
             w.write_pod(uint32_t(values.size()));
             for (const auto& value : values) w.write_string(value);
@@ -353,7 +804,10 @@ bool ModelBundle::save(const std::string& dir_path) const {
             strings(sym.param_types); strings(sym.param_names); strings(sym.includes_or_imports);
             w.write_string(sym.documentation); w.write_string(sym.canonical_ast);
             w.write_string(sym.body_snippet); w.write_string(sym.file_path);
-            w.write_pod(uint8_t(sym.lang)); w.write_pod(sym.ast_vsa);
+            w.write_pod(uint8_t(sym.lang));
+            w.write_pod(uint8_t(sym.is_method)); w.write_pod(uint8_t(sym.is_static));
+            w.write_string(sym.owner);
+            w.write_pod(sym.ast_vsa);
         }
         w.write_pod(uint32_t(code_graph.edges().size()));
         for (const auto& edge : code_graph.edges()) {
@@ -374,6 +828,22 @@ bool ModelBundle::save(const std::string& dir_path) const {
         if (!w.ok()) return false;
         w.write_pod(uint32_t(0x45504931)); w.write_pod(uint32_t(episodes.size()));
         for (const auto& [user, assistant] : episodes) { w.write_string(user); w.write_string(assistant); }
+    }
+
+    // Short-term discourse state (optional; older models load without it).
+    {
+        BinaryWriter w(dir_path + "/context.bin");
+        if (!w.ok()) return false;
+        w.write_pod(uint32_t(0x43545832)); w.write_pod(uint32_t(1));
+        w.write_pod(uint64_t(context_memory.turn()));
+        w.write_pod(uint32_t(context_memory.entities().size()));
+        for (const auto& entity : context_memory.entities()) {
+            w.write_string(entity.name);
+            w.write_pod(uint8_t(entity.gender)); w.write_pod(uint8_t(entity.number));
+            w.write_pod(entity.mentions); w.write_pod(entity.last_turn); w.write_pod(entity.salience);
+        }
+        w.write_pod(uint32_t(context_memory.last_concepts().size()));
+        for (const auto& topic : context_memory.last_concepts()) w.write_string(topic);
     }
 
     // 5. Realizer
@@ -406,6 +876,10 @@ bool ModelBundle::save(const std::string& dir_path) const {
 }
 
 bool ModelBundle::load(const std::string& dir_path, bool use_mmap) {
+    if (fs::exists(dir_path + "/language_rules.json"))
+        language_rules.load(dir_path + "/language_rules.json");
+    else if (language_rules.empty())
+        language_rules.load_default();
     // 1. Codebook
     {
         MappedReader r(dir_path + "/codebook.bin", use_mmap);
@@ -487,6 +961,29 @@ bool ModelBundle::load(const std::string& dir_path, bool use_mmap) {
         }
     }
 
+    has_context_policy = false;
+    context_policy = SparseTsetlinModel{};
+    if (fs::exists(dir_path + "/dialogue_context.bin")) {
+        MappedReader r(dir_path + "/dialogue_context.bin", use_mmap);
+        uint32_t magic; uint8_t enabled;
+        if (!r.valid() || !r.read_pod(magic) || magic != 0x43545831 || !r.read_pod(enabled) || enabled > 1) return false;
+        if (enabled) {
+            uint32_t nf, nc, cpc;
+            if (!r.read_pod(nf) || !r.read_pod(nc) || !r.read_pod(cpc) || nf != 16 || !nc || nc > size_t(DialogIntent::COUNT) || !cpc || cpc > 512) return false;
+            context_policy.num_features = nf; context_policy.num_classes = nc; context_policy.clauses_per_class = cpc;
+            context_policy.clauses.resize(size_t(nc) * cpc);
+            for (auto& clause : context_policy.clauses) {
+                uint32_t np, nn;
+                if (!r.read_pod(clause.sign) || !r.read_pod(np) || !r.read_pod(nn) || np > nf || nn > nf) return false;
+                clause.pos_literals.resize(np); clause.neg_literals.resize(nn);
+                if (!r.read_bytes(clause.pos_literals.data(), np * sizeof(uint16_t)) || !r.read_bytes(clause.neg_literals.data(), nn * sizeof(uint16_t))) return false;
+                for (auto f : clause.pos_literals) if (f >= nf) return false;
+                for (auto f : clause.neg_literals) if (f >= nf) return false;
+            }
+            has_context_policy = true;
+        }
+    }
+
     // 4. Causal Graph
     {
         MappedReader r(dir_path + "/graph.bin", use_mmap);
@@ -532,6 +1029,9 @@ bool ModelBundle::load(const std::string& dir_path, bool use_mmap) {
             if (e.src >= nn || e.dst >= nn || e.rel >= nr || e.modality[15] != '\0') return false;
         graph.load_raw(std::move(nodes), std::move(rels), std::move(edges));
     }
+    mapped_graph.reset();
+    if (use_mmap && fs::exists(dir_path + "/graph_mmap.bin"))
+        mapped_graph = MappedCausalGraph::open(dir_path + "/graph_mmap.bin");
 
     code_graph = CodeGraph{};
     if (fs::exists(dir_path + "/code_index.bin")) {
@@ -545,7 +1045,8 @@ bool ModelBundle::load(const std::string& dir_path, bool use_mmap) {
             for (auto& value : values) if (!r.read_string(value)) return false;
             return true;
         };
-        if (!r.valid() || !r.read_pod(magic) || magic != 0x434F4432 || !size(count)) return false;
+        if (!r.valid() || !r.read_pod(magic) || (magic != 0x434F4432 && magic != 0x434F4433) || !size(count)) return false;
+        const bool extended = magic == 0x434F4433;
         std::vector<CodeSymbol> symbols(count);
         for (uint32_t i = 0; i < count; ++i) {
             auto& sym = symbols[i]; uint8_t lang = 0; sym.id = i;
@@ -553,7 +1054,13 @@ bool ModelBundle::load(const std::string& dir_path, bool use_mmap) {
                 !strings(sym.param_types) || !strings(sym.param_names) || !strings(sym.includes_or_imports) ||
                 !r.read_string(sym.documentation) || !r.read_string(sym.canonical_ast) ||
                 !r.read_string(sym.body_snippet) || !r.read_string(sym.file_path) ||
-                !r.read_pod(lang) || lang > uint8_t(CodeLanguage::UNKNOWN) || !r.read_pod(sym.ast_vsa)) return false;
+                !r.read_pod(lang) || lang > uint8_t(CodeLanguage::UNKNOWN)) return false;
+            if (extended) {
+                uint8_t method = 0, is_static = 0;
+                if (!r.read_pod(method) || !r.read_pod(is_static) || !r.read_string(sym.owner)) return false;
+                sym.is_method = method != 0; sym.is_static = is_static != 0;
+            }
+            if (!r.read_pod(sym.ast_vsa)) return false;
             sym.lang = static_cast<CodeLanguage>(lang);
         }
         if (!size(count)) return false;
@@ -581,6 +1088,17 @@ bool ModelBundle::load(const std::string& dir_path, bool use_mmap) {
         while (std::getline(pairs, pair)) if (!pair.empty()) realizer_pairs.push_back(std::move(pair));
     }
 
+    episodic_memory.clear();
+    if (fs::exists(dir_path + "/episodic_facts.bin")) {
+        MappedReader r(dir_path + "/episodic_facts.bin", use_mmap);
+        uint32_t magic = 0, count = 0;
+        if (!r.valid() || !r.read_pod(magic) || magic != 0x45504631 || !r.read_pod(count) || count > 100000) return false;
+        for (uint32_t i = 0; i < count; ++i) {
+            std::string entity, property, value, source;
+            if (!r.read_string(entity) || !r.read_string(property) || !r.read_string(value) || !r.read_string(source)) return false;
+            episodic_memory.remember(entity, property, value, source);
+        }
+    }
     episodes.clear();
     if (fs::exists(dir_path + "/episodes.bin")) {
         MappedReader r(dir_path + "/episodes.bin", use_mmap);
@@ -590,7 +1108,32 @@ bool ModelBundle::load(const std::string& dir_path, bool use_mmap) {
         for (auto& [user, assistant] : episodes)
             if (!r.read_string(user) || !r.read_string(assistant)) return false;
     }
+    context_memory.clear();
+    if (fs::exists(dir_path + "/context.bin")) {
+        MappedReader r(dir_path + "/context.bin", use_mmap);
+        uint32_t magic = 0, version = 0, count = 0;
+        uint64_t turn = 0;
+        if (!r.valid() || !r.read_pod(magic) || magic != 0x43545832 || !r.read_pod(version) || version != 1 ||
+            !r.read_pod(turn) || !r.read_pod(count) || count > 1024) return false;
+        std::vector<ContextEntity> entities(count);
+        for (auto& entity : entities) {
+            uint8_t gender = 0, number = 0;
+            if (!r.read_string(entity.name) || !r.read_pod(gender) || gender > 2 ||
+                !r.read_pod(number) || number > 1 || !r.read_pod(entity.mentions) ||
+                !r.read_pod(entity.last_turn) || !r.read_pod(entity.salience)) return false;
+            entity.gender = static_cast<GramGender>(gender);
+            entity.number = static_cast<GramNumber>(number);
+        }
+        uint32_t concepts = 0;
+        if (!r.read_pod(concepts) || concepts > 1024) return false;
+        std::vector<std::string> last(concepts);
+        for (auto& topic : last) if (!r.read_string(topic)) return false;
+        context_memory.restore(std::move(entities), std::move(last), turn);
+    }
 
+    if (fs::exists(dir_path + "/fluency.bin")) {
+        if (!fluent_realizer.load(dir_path + "/fluency.bin")) return false;
+    } else fluent_realizer = AnalogicalFluencyRealizer{};
     // 5. Realizer
     {
         MappedReader r(dir_path + "/realizer.bin", use_mmap);
@@ -626,6 +1169,13 @@ bool ModelBundle::load(const std::string& dir_path, bool use_mmap) {
     return true;
 }
 
+bool ModelBundle::refresh_mapped_graph(const std::string& dir_path) {
+    mapped_graph.reset();
+    if (!fs::exists(dir_path + "/graph_mmap.bin")) return false;
+    mapped_graph = MappedCausalGraph::open(dir_path + "/graph_mmap.bin");
+    return mapped_graph != nullptr;
+}
+
 size_t ModelBundle::disk_size_bytes(const std::string& dir_path) {
     size_t total = 0;
     std::error_code ec;
@@ -639,10 +1189,11 @@ size_t ModelBundle::disk_size_bytes(const std::string& dir_path) {
 
 size_t ModelBundle::estimated_ram_bytes() const noexcept {
     size_t total = codebook.size() * (2 * sizeof(HyperVector) + 32);
-    total += sdm.memory_bytes();
+    total += sdm.memory_bytes() + episodic_memory.memory_bytes() + context_memory.memory_bytes();
     total += has_sparse_tsetlin ? sparse_tsetlin.memory_bytes() : tsetlin.memory_bytes();
+    if (has_context_policy) total += context_policy.memory_bytes();
     total += graph.memory_bytes();
-    total += realizer.memory_bytes() + code_graph.memory_bytes();
+    total += realizer.memory_bytes() + fluent_realizer.memory_bytes() + code_graph.memory_bytes();
     for (const auto& pair : realizer_pairs) total += pair.capacity();
     for (const auto& [user, assistant] : episodes) total += user.capacity() + assistant.capacity();
     return total;

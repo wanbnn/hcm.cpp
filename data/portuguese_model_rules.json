@@ -1,0 +1,245 @@
+{
+  "language": "pt",
+  "instruction_prefixes": [
+    "script ",
+    "crie ",
+    "gere ",
+    "escreva ",
+    "faça ",
+    "faca ",
+    "implemente ",
+    "monte "
+  ],
+  "correction_markers": [
+    "não",
+    "nao",
+    "você que",
+    "voce que",
+    "você deve",
+    "voce deve",
+    "na verdade",
+    "está errado",
+    "esta errado"
+  ],
+  "question_prefixes": [
+    "explique",
+    "explain",
+    "por que",
+    "o que",
+    "como",
+    "qual",
+    "quem",
+    "what",
+    "why",
+    "how",
+    "diga",
+    "mostre"
+  ],
+  "causal_cues": [
+    "por que",
+    "porque",
+    "causa",
+    "consequ",
+    "why",
+    "explain why",
+    "o que acontece",
+    "o que aconteceria"
+  ],
+  "code_cues": [
+    "código",
+    "codigo",
+    "função",
+    "funcao",
+    "function",
+    "módulo",
+    "modulo",
+    "code",
+    "api",
+    "workspace",
+    "script",
+    "programa",
+    "snippet",
+    "python",
+    "javascript",
+    "typescript",
+    "c++",
+    "cpp",
+    "java",
+    "bash"
+  ],
+  "generation_cues": [
+    "gere",
+    "gerar",
+    "crie",
+    "criar",
+    "generate",
+    "write",
+    "refator",
+    "patch",
+    "combine",
+    "componha",
+    "sintet",
+    "implemente",
+    "escreva",
+    "monte",
+    "faça",
+    "faca",
+    "soma",
+    "somar",
+    "some",
+    "calcule",
+    "create",
+    "make",
+    "build"
+  ],
+  "code_generation_markers": [
+    "combine",
+    "componha",
+    "sintet",
+    "patch",
+    "script",
+    "programa"
+  ],
+  "math_cues": [
+    "quanto",
+    "quantos",
+    "quantas",
+    "calcule",
+    "resultado",
+    "total",
+    "what is",
+    "how many",
+    "how much"
+  ],
+  "resource_cues": [
+    "ram",
+    "memória",
+    "memoria",
+    "gb",
+    "gib"
+  ],
+  "followup_markers": [
+    "crie ele",
+    "crie isso",
+    "faça ele",
+    "faca ele",
+    "o script",
+    "o programa",
+    "não",
+    "nao",
+    "você que",
+    "voce que"
+  ],
+  "hypothetical_prefixes": [
+    "se ",
+    "if "
+  ],
+  "leading_rule_prefixes": [
+    "se ",
+    "if ",
+    "quando ",
+    "when ",
+    "embora ",
+    "although ",
+    "though ",
+    "caso "
+  ],
+  "consequence_markers": [
+    " então ",
+    " then ",
+    ", "
+  ],
+  "quantifier_words": [
+    "todo",
+    "todos",
+    "toda",
+    "todas",
+    "qualquer",
+    "quaisquer",
+    "all",
+    "every",
+    "any",
+    "algum",
+    "alguma",
+    "alguns",
+    "algumas",
+    "some",
+    "nenhum",
+    "nenhuma",
+    "none",
+    "no",
+    "maioria",
+    "most",
+    "cada",
+    "each"
+  ],
+  "python_cues": [
+    "python",
+    "py"
+  ],
+  "javascript_cues": [
+    "javascript",
+    "js"
+  ],
+  "typescript_cues": [
+    "typescript",
+    "ts"
+  ],
+  "cpp_cues": [
+    "c++",
+    "cpp"
+  ],
+  "math_word_operators": [
+    "mais|+",
+    "soma|+",
+    "somar|+",
+    "plus|+",
+    "somado a|+",
+    "menos|-",
+    "subtrai|-",
+    "subtrai|-",
+    "minus|-",
+    "vezes|*",
+    "multiplica|*",
+    "times|*",
+    "multiplicado por|*",
+    "dividido por|/",
+    "divide|/",
+    "divided by|/"
+  ],
+  "math_add_cues": [
+    "mais",
+    "ganha",
+    "compra",
+    "adiciona",
+    "total",
+    "soma",
+    "more",
+    "buys",
+    "gains",
+    "plus"
+  ],
+  "math_subtract_cues": [
+    "perde",
+    "remove",
+    "gasta",
+    "menos",
+    "lost",
+    "minus",
+    "subtract"
+  ],
+  "math_multiply_cues": [
+    "cada",
+    "vezes",
+    "times",
+    "multiplica",
+    "each",
+    "multiply"
+  ],
+  "math_divide_cues": [
+    "divide",
+    "reparte",
+    "divided",
+    "split"
+  ]
+}

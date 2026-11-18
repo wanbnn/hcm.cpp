@@ -53,6 +53,18 @@ void test_cpp_and_python_synthesis() {
         "bad.cpp", CodeLanguage::CPP, incompatible);
     auto rejected = synth.synthesize("first e second", CodeLanguage::CPP, incompatible, codebook);
     assert(!rejected.syntax_valid && rejected.code.empty() && !rejected.error.empty());
+    CodeGraph chain;
+    TreeSitterCodeParser::ingest_source(
+        "int first(int x) {return x+1;} int second(int x) {return x*2;} int third(int x) {return x-1;}",
+        "chain.cpp", CodeLanguage::CPP, chain);
+    auto three = synth.synthesize("first e second e third", CodeLanguage::CPP, chain, codebook);
+    assert(three.syntax_valid && three.used_symbols.size() == 3);
+    assert(three.code.find("third(step2)") != std::string::npos);
+    assert(three.symbol_ids.size() == 3 && !three.pattern_votes.empty());
+    auto unknown = synth.synthesize("abra o arquivo de cláusulas e valide se está corrompido", CodeLanguage::CPP, chain, codebook);
+    assert(!unknown.syntax_valid && unknown.code.empty());
+    auto unrelated = synth.synthesize("calcule uma matriz", CodeLanguage::CPP, chain, codebook);
+    assert(!unrelated.syntax_valid && unrelated.code.empty());
     std::cout << "[PASS] test_cpp_and_python_synthesis\n";
 }
 

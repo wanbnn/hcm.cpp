@@ -101,10 +101,24 @@ void test_random_indexing_codebook() {
               << ", sim(fogo,peixe)=" << sim_diff << ")\n";
 }
 
+void test_loaded_semantics_survive_incremental_ingestion() {
+    Codebook trained;
+    trained.observe_context("leitura", {"livro", "texto", "ideias"});
+    trained.finalize_semantics();
+    const auto expected = trained.semantic_vector(trained.find_id("leitura"));
+    Codebook loaded;
+    loaded.load_raw(trained.tokens(), trained.base_vectors(), trained.semantic_vectors());
+    loaded.observe_context("conversa", {"amizade", "diálogo"});
+    loaded.finalize_semantics();
+    assert(loaded.semantic_vector(loaded.find_id("leitura")) == expected);
+    assert(loaded.semantic_vector(loaded.find_id("conversa")) != loaded.base_vector(loaded.find_id("conversa")));
+}
+
 int main() {
     test_orthogonality();
     test_bind_and_permute();
     test_bundle_recovery();
     test_random_indexing_codebook();
+    test_loaded_semantics_survive_incremental_ingestion();
     return 0;
 }

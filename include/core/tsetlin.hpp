@@ -17,7 +17,12 @@ enum class DialogIntent : uint8_t {
     AGREE         = 4,
     HYPOTHESIZE   = 5,
     GREET         = 6,
-    COUNT         = 7
+    THANK         = 7,
+    FAREWELL      = 8,
+    INTRODUCE     = 9,
+    HELP          = 10,
+    SMALLTALK     = 11,
+    COUNT         = 12
 };
 
 const char* intent_to_string(DialogIntent intent) noexcept;

@@ -1,0 +1,1 @@
+A memória associativa relaciona conceitos por operações bit a bit. O planejador escolhe uma rota curta quando ela termina em um conceito da pergunta, mas mantém uma alternativa quando o grafo oferece outra explicação. A verbalização só começa depois que o plano está fechado. Esse texto é uma sonda de calibração pequena, não um corpus representativo.

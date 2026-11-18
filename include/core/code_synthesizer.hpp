@@ -22,6 +22,11 @@ struct CodeSynthesisResult {
     std::string error;
     CodePatternTag selected_pattern = CodePatternTag::CALL_CHAIN;
     std::vector<std::string> used_symbols;
+    std::vector<uint32_t> symbol_ids;
+    bool is_patch = false;
+    std::string patch_target;
+    std::vector<int32_t> pattern_votes;
+    std::vector<size_t> fired_clauses;
     bool syntax_valid = false;
 };
 

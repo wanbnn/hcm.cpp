@@ -56,6 +56,13 @@ void CausalGraph::add_fact(const std::string& subj,
     const uint32_t s = get_or_add_node(subj, subj_gender, subj_number);
     const uint32_t r = get_or_add_relation(rel);
     const uint32_t d = get_or_add_node(obj, obj_gender, obj_number);
+    // Surface morphology can arrive after a node first appeared through another
+    // fact. Upgrade a default masculine node when a later feminine analysis is
+    // available (e.g. "água" in a corpus edge created without gender metadata).
+    if (subj_gender == GramGender::FEM) nodes_[s].gender = GramGender::FEM;
+    if (obj_gender == GramGender::FEM) nodes_[d].gender = GramGender::FEM;
+    if (subj_number == GramNumber::PLUR) nodes_[s].number = GramNumber::PLUR;
+    if (obj_number == GramNumber::PLUR) nodes_[d].number = GramNumber::PLUR;
 
     // Check if edge already exists
     for (uint32_t eid : out_adj_[s]) {
@@ -84,7 +91,8 @@ std::vector<CausalStep> CausalGraph::query_direct(const std::string& concept_nam
     const uint32_t nid = find_node(concept_name);
     if (nid == UINT32_MAX) return steps;
 
-    auto make_step = [&](const GraphEdge& e) {
+    auto make_step = [&](uint32_t eid) {
+        const auto& e = edges_[eid];
         return CausalStep{
             nodes_[e.src].name,
             relation_names_[e.rel],
@@ -97,15 +105,15 @@ std::vector<CausalStep> CausalGraph::query_direct(const std::string& concept_nam
             nodes_[e.src].gender,
             nodes_[e.src].number,
             nodes_[e.dst].gender,
-            nodes_[e.dst].number
+            nodes_[e.dst].number, eid
         };
     };
 
     for (uint32_t eid : out_adj_[nid]) {
-        steps.push_back(make_step(edges_[eid]));
+        steps.push_back(make_step(eid));
     }
     for (uint32_t eid : in_adj_[nid]) {
-        steps.push_back(make_step(edges_[eid]));
+        steps.push_back(make_step(eid));
     }
 
     std::sort(steps.begin(), steps.end(),
@@ -172,7 +180,7 @@ std::vector<CausalPath> CausalGraph::find_paths(const std::vector<std::string>& 
                     nodes_[e.src].gender,
                     nodes_[e.src].number,
                     nodes_[e.dst].gender,
-                    nodes_[e.dst].number
+                    nodes_[e.dst].number, eid
                 });
             }
             // Bonus if path connects two distinct seed concepts
@@ -231,7 +239,7 @@ std::vector<CausalPath> CausalGraph::find_paths(const std::vector<std::string>& 
                     nodes_[e.src].gender,
                     nodes_[e.src].number,
                     nodes_[e.dst].gender,
-                    nodes_[e.dst].number
+                    nodes_[e.dst].number, eid
                 });
                 results.push_back(std::move(cp));
             }
