@@ -225,3 +225,6 @@ código testado e ingestão massiva): [detalhes](docs/MILESTONES_12_18.md).
 Guia completo para treinar um modelo do zero (build, datasets, indexação, SFT,
 alignment, avaliação, fine-tuning, inferência e publicação):
 [treinar do zero](docs/TRAIN_FROM_SCRATCH.md).
+
+Resumo consolidado de corpus, treino, modelo v3.1, parser, discurso, prosa
+natural, mineração e busca: [resumo da implementação](docs/RESUMO_IMPLEMENTACAO.md).
