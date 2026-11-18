@@ -139,37 +139,64 @@ numericamente idênticos em `test_hip_equiv`.
 ### Fatos de domínio: motor
 
 A apostila do SENAI é texto técnico. Ingeri-la inteira como fatos gera ruído:
-o parser extraiu **2.320 triplas / 2.804 nós** só das 10 páginas, quase uma
-tripla a cada 8 palavras. Por isso o corpus completo continua em
-`--style-only`.
+o parser extraiu **2.320 triplas / 2.804 nós** só das 10 páginas. Por isso o
+corpus completo continua em `--style-only`.
 
-Para o exemplo de motores, foi criado
-`data/conversation_pt/engine_facts.txt` com 19 frases verificadas da apostila
-(combustão, quatro tempos, válvulas, biela, árvore de manivelas, ciclo Otto).
-A ingestão com `--facts-only` adicionou 31 triplas e elevou o grafo de 19/12
-para **63 nós / 43 arestas**, sem alterar codebook, léxico, coerência ou o
-classificador de diálogo. O heldout ficou em 741/1.060 e os probes em 18/18.
+Para o exemplo de motores, `data/conversation_pt/engine_facts.txt` contém 29
+frases verificadas (combustão, quatro tempos, partes, válvulas, biela, árvore
+de manivelas, ciclo Otto). A ingestão com `--facts-only` adicionou 31 triplas
+e elevou o grafo de 19/12 para **60 nós / 43 arestas**, sem alterar codebook,
+léxico, coerência ou o classificador de diálogo. O heldout ficou em 740/1.060
+e os probes em 18/18.
 
-Exemplos de resposta após essa ingestão:
+O chat agora reconhece que “como funciona” pede um documento de mecanismo e
+emite múltiplas seções:
 
 ```text
 Você> Como funciona o motor de combustão interna?
-CogniCore> O motor transforma o combustão. Alternativamente, o combustão é um processo químico que libera calor.
+CogniCore> # motor de combustão interna: uma explicação causal
 
-Você> O que é o ciclo Otto?
-CogniCore> O ciclo usa o centelha.
+## Partes
+O motor de combustão interna contém o conjunto móvel. O motor de combustão interna contém o cabeçote. O motor de combustão interna contém o bloco.
+
+## Funcionamento
+O motor de combustão interna transforma a queima da mistura. O motor de combustão interna produz o trabalho. O motor de combustão interna usa o ciclo otto.
 ```
 
-O conteúdo agora vem do grafo, mas a superfície ainda revela limitações do
-parser: termos multi-palavra viram cabeças curtas (`motor de combustão
-interna` → `motor`) e a concordância de algumas realizações sai errada
-(`o combustão`, `o vela`). Corrigir isso exige melhorar a extração
-multi-palavra/gênero, não apenas aumentar o corpus.
+O formato não vem de uma palavra-chave isolada: o `ContentPlanner` monta o
+`AnswerGraph`, mede fatos/partes/funções/sequência e só então escolhe
+`BRIEF`, `EXPLANATORY` ou `DOCUMENT`. “Resuma” continua curto; “como funciona”
+com partes e funções vira documento. `--shape brief|explain|document` serve
+apenas como override de teste.
+
+### Parser e discurso content-first
+
+- `TextParser` agora extrai NPs multi-palavra (`motor de combustão interna`,
+  `vela de ignição`, `árvore de manivelas`) e infere gênero/número pelo núcleo.
+- As listas lexicais/sintáticas não ficam mais em `text_parser.cpp`: elas vêm
+  de `parser_pt.json`, copiado para o diretório do modelo. O usuário pode
+  editar artigos, preposições, pronomes, verbos, marcadores, listas de gênero
+  e stopwords sem recompilar. O código só consome o arquivo.
+- `TermResolver` guarda aliases (`motor` ↔ `motor de combustão interna`) em
+  `terms.tsv`; o grafo, o planejador e o chat resolvem o termo canônico.
+- A ontologia ganhou `HAS_PART`, `PART_OF`, `FUNCTION`, `ENABLES`,
+  `SEQUENCE` e `PRECEDES`, além de `TAXONOMIC`, `PROPERTY`, `CAUSAL` e
+  `ACTION`.
+- `ContentPlanner` escolhe um objetivo comunicativo (DEFINIÇÃO, MECANISMO,
+  CAUSA, COMPARAÇÃO, PROCEDIMENTO, ENSAIO) e monta movimentos retóricos
+  (definição, partes, funcionamento, sequência, conclusão). O
+  `DocumentPlanner` virou renderizador de `ContentPlan`; chat e `write` usam o
+  mesmo motor.
+
+Ainda há limites de superfície: algumas concordâncias e termos compostos
+menos frequentes saem imperfeitos, e o corpus inteiro não é convertido em
+fatos. O ganho estrutural é que o modelo já decide o tamanho pelo conteúdo
+disponível, não por uma lista fixa de palavras.
 
 ## Métricas
 
 Artefato final: 48.008 tokens no codebook VSA (teto de 48.000 + os 8 tokens
-especiais), 63 nós e 43 arestas no grafo factual (19/12 do núcleo curado +
+especiais), 60 nós e 43 arestas no grafo factual (19/12 do núcleo curado +
 fatos de motor), 55 frames, 2.048 produções DOP, 80.000 contextos PPM e
 8.900.814 n-gramas.
 
@@ -180,7 +207,7 @@ fatos de motor), 55 frames, 2.048 produções DOP, 80.000 contextos PPM e
 | Coerência KN | 359.940 unigramas, 2.930.398 bigramas, 5.968.686 trigramas |
 | Disco | 556.176 KB (~543 MB) |
 | RAM estimada pelo `stats` | 1.397.920 KB (~1,33 GB) |
-| Intenção reservada (heldout) | 741/1.060 (69,91%) |
+| Intenção reservada (heldout) | 740/1.060 (69,81%) |
 | Probes sintéticos | 18/18 (100%) |
 | Calibração PPM (`heldout_pt.txt`) | 2,2656 bits/byte; perplexidade 4,8084 |
 

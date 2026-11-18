@@ -45,95 +45,17 @@ bool ends_with(const std::string& value, const std::string& suffix) {
            value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
-// General (non-marker) lexical verb recognizer. It is deliberately
-// conservative: a token is a verb only if it appears in a known conjugation
-// table or has an unambiguous past-tense ending. This keeps the rule fallback
-// from turning ordinary nouns into predicates.
-const std::unordered_map<std::string, std::string>& known_verb_forms() {
-    static const auto forms = [] {
-        static const std::vector<std::string> pt_lemmas = {
-            "analisar", "observar", "estudar", "pesquisar", "medir", "calcular", "mover",
-            "empurrar", "puxar", "criar", "construir", "destruir", "quebrar", "consertar",
-            "usar", "aplicar", "incluir", "excluir", "abrir", "fechar", "ler", "escrever",
-            "falar", "dizer", "ver", "ouvir", "pensar", "entender", "aprender", "ensinar",
-            "comprar", "vender", "pagar", "receber", "enviar", "levar", "trazer", "comer",
-            "beber", "dormir", "acordar", "andar", "correr", "nadar", "voar", "cair",
-            "subir", "descer", "começar", "terminar", "continuar", "parar", "mudar",
-            "aumentar", "diminuir", "melhorar", "piorar", "permitir", "proibir", "exigir",
-            "precisar", "depender", "conter", "manter", "obter", "perder", "ganhar",
-            "escolher", "decidir", "provar", "mostrar", "indicar", "representar",
-            "significar", "acontecer", "ocorrer", "existir", "viver", "morrer", "nascer",
-            "crescer", "ferver", "congelar", "queimar", "derreter", "evaporar",
-            "condensar", "aquecer", "esfriar", "iluminar", "escurecer", "acelerar",
-            "frear", "girar", "vibrar", "refletir", "absorver", "emitir", "conduzir",
-            "isolar", "carregar", "descarregar", "armazenar", "processar", "transformar",
-            "combinar", "separar", "dividir", "juntar", "somar", "subtrair", "multiplicar",
-            "falhar", "caber", "superaquecer", "repartir", "sobrar", "faltar", "ocorrer",
-            "gerar", "causar", "provocar", "produzir", "formar", "apagar", "bloquear",
-            "reduzir", "evitar", "possuir", "ser", "ter", "poder", "dever", "fazer", "ir",
-            "vir", "estar", "haver", "dar", "saber", "querer", "trazer", "seguir"
-        };
-        static const std::vector<std::string> en_lemmas = {
-            "analyze", "observe", "study", "measure", "calculate", "move", "push", "pull",
-            "create", "build", "destroy", "break", "fix", "use", "apply", "include",
-            "exclude", "open", "close", "read", "write", "speak", "say", "see", "hear",
-            "think", "understand", "learn", "teach", "buy", "sell", "pay", "receive",
-            "send", "carry", "bring", "eat", "drink", "sleep", "wake", "walk", "run",
-            "swim", "fly", "fall", "rise", "descend", "begin", "finish", "continue",
-            "stop", "change", "increase", "decrease", "improve", "worsen", "allow",
-            "forbid", "require", "need", "depend", "contain", "keep", "obtain", "lose",
-            "win", "choose", "decide", "prove", "show", "indicate", "represent", "mean",
-            "happen", "occur", "exist", "live", "die", "grow", "boil", "freeze", "burn",
-            "melt", "evaporate", "condense", "heat", "cool", "illuminate", "accelerate",
-            "brake", "spin", "vibrate", "reflect", "absorb", "emit", "conduct",
-            "isolate", "load", "unload", "store", "process", "transform", "combine",
-            "separate", "divide", "join", "add", "subtract", "multiply", "generate",
-            "cause", "produce", "prevent", "block", "reduce", "avoid", "have", "be", "do",
-            "go", "come", "make", "take", "get", "give", "know", "want"
-        };
-        std::unordered_map<std::string, std::string> out;
-        for (const auto& lemma : pt_lemmas) {
-            out.emplace(lemma, lemma);
-            for (auto tense : {GramTense::PRES, GramTense::PAST, GramTense::FUT, GramTense::SUBJ})
-                for (auto number : {GramNumber::SING, GramNumber::PLUR}) {
-                    auto form = MorphologicalRealizer::conjugate_verb(lemma, tense, number, "pt");
-                    if (!form.empty() && form != lemma) out.emplace(form, lemma);
-                }
-        }
-        for (const auto& lemma : en_lemmas) {
-            out.emplace(lemma, lemma);
-            for (auto tense : {GramTense::PRES, GramTense::PAST, GramTense::FUT})
-                for (auto number : {GramNumber::SING, GramNumber::PLUR}) {
-                    auto form = MorphologicalRealizer::conjugate_verb(lemma, tense, number, "en");
-                    if (!form.empty() && form != lemma) out.emplace(form, lemma);
-                }
-        }
-        // Frequent irregulars that the generic conjugator cannot derive.
-        const std::pair<const char*, const char*> irregulars[] = {
-            {"é", "ser"}, {"são", "ser"}, {"foi", "ser"}, {"foram", "ser"}, {"era", "ser"},
-            {"tem", "ter"}, {"têm", "ter"}, {"teve", "ter"}, {"tiveram", "ter"},
-            {"faz", "fazer"}, {"fazem", "fazer"}, {"fez", "fazer"}, {"fizeram", "fazer"},
-            {"vai", "ir"}, {"vão", "ir"}, {"foi", "ir"}, {"vem", "vir"}, {"vêm", "vir"},
-            {"está", "estar"}, {"estão", "estar"}, {"estava", "estar"}, {"há", "haver"},
-            {"dá", "dar"}, {"dão", "dar"}, {"deu", "dar"}, {"sabe", "saber"}, {"sabem", "saber"},
-            {"quer", "querer"}, {"querem", "querer"}, {"põe", "pôr"}, {"põem", "pôr"},
-            {"is", "be"}, {"are", "be"}, {"was", "be"}, {"were", "be"}, {"has", "have"},
-            {"had", "have"}, {"does", "do"}, {"did", "do"}, {"goes", "go"}, {"went", "go"},
-            {"makes", "make"}, {"made", "make"}, {"takes", "take"}, {"took", "take"},
-            {"gets", "get"}, {"got", "get"}, {"gives", "give"}, {"gave", "give"}
-        };
-        for (const auto& [form, lemma] : irregulars) out.emplace(form, lemma);
-        return out;
-    }();
-    return forms;
-}
+} // namespace
 
-bool general_verb_lemma(const std::string& token, std::string& lemma) {
+// General (non-marker) lexical verb recognizer. The lemma/form table is
+// loaded from the model-owned parser_pt.json; the suffix rules below are
+// morphological code, not a fixed vocabulary.
+bool TextParser::general_verb_lemma(const std::string& token, std::string& lemma) const {
     if (token.size() < 2) return false;
-    const auto& forms = known_verb_forms();
-    if (auto it = forms.find(token); it != forms.end()) { lemma = it->second; return true; }
-    // Unambiguous regular past endings (analytic languages rarely use these
-    // endings for nouns).
+    // Closed-class words must never be promoted to verbs ("de" -> "dar").
+    if (prepositions_.count(token) || articles_.count(token) ||
+        conjunctions_.count(token) || pronouns_.count(token)) return false;
+    if (auto it = verb_forms_.find(token); it != verb_forms_.end()) { lemma = it->second; return true; }
     const std::pair<const char*, const char*> endings[] = {
         {"aram", "ar"}, {"eram", "er"}, {"iram", "ir"},
         {"ou", "ar"}, {"eu", "er"}, {"iu", "ir"}
@@ -149,15 +71,16 @@ bool general_verb_lemma(const std::string& token, std::string& lemma) {
     return false;
 }
 
-std::string clean_span(const std::vector<std::string>& tokens, size_t start, size_t end,
-                       const std::unordered_set<std::string>& stopwords) {
-    static const std::unordered_set<std::string> extra = {
-        "meu", "minha", "meus", "minhas", "seu", "sua", "seus", "suas",
-        "este", "esta", "esse", "essa", "isso", "isto", "aquele", "aquela",
-        "only", "just", "muito", "muita", "muitos", "muitas", "só", "so"
-    };
-    while (start < end && (stopwords.count(tokens[start]) || extra.count(tokens[start]))) ++start;
-    while (end > start && (stopwords.count(tokens[end - 1]) || extra.count(tokens[end - 1]))) --end;
+std::string TextParser::clean_span(const std::vector<std::string>& tokens, size_t start,
+                                  size_t end) const {
+    while (start < end && (stopwords_.count(tokens[start]) || clean_extra_.count(tokens[start]))) ++start;
+    while (end > start && (stopwords_.count(tokens[end - 1]) || clean_extra_.count(tokens[end - 1]))) --end;
+    // A new PP introduced by "em/para/com/por/..." usually belongs to the verb,
+    // not to the nominal head. Stop the NP before it.
+    for (size_t i = start + 1; i < end; ++i) {
+        if (np_boundary_prepositions_.count(tokens[i])) { end = i; break; }
+    }
+    while (end > start && (stopwords_.count(tokens[end - 1]) || clean_extra_.count(tokens[end - 1]))) --end;
     std::string out;
     for (size_t i = start; i < end; ++i) {
         if (!out.empty()) out.push_back(' ');
@@ -166,23 +89,22 @@ std::string clean_span(const std::vector<std::string>& tokens, size_t start, siz
     return out;
 }
 
-size_t find_main_verb(const std::vector<std::string>& tokens, std::string& lemma, size_t from = 1) {
+size_t TextParser::find_main_verb(const std::vector<std::string>& tokens, std::string& lemma,
+                                  size_t from) const {
     for (size_t i = from; i < tokens.size(); ++i) {
         if (general_verb_lemma(tokens[i], lemma)) return i;
     }
     return std::string::npos;
 }
 
-void agree_with_article(const std::vector<std::string>& tokens, size_t begin,
-                        GramGender& gender, GramNumber& number) {
+void TextParser::agree_with_article(const std::vector<std::string>& tokens, size_t begin,
+                                   GramGender& gender, GramNumber& number) const {
     if (begin >= tokens.size()) return;
     const auto& article = tokens[begin];
-    if (article == "a" || article == "as" || article == "uma" || article == "umas") gender = GramGender::FEM;
-    if (article == "o" || article == "os" || article == "um" || article == "uns") gender = GramGender::MASC;
-    if (article == "as" || article == "os" || article == "umas" || article == "uns") number = GramNumber::PLUR;
+    if (feminine_articles_.count(article)) gender = GramGender::FEM;
+    if (masculine_articles_.count(article)) gender = GramGender::MASC;
+    if (plural_articles_.count(article)) number = GramNumber::PLUR;
 }
-
-} // namespace
 
 TextParser::TextParser() {
     init_default_rules();
@@ -190,48 +112,135 @@ TextParser::TextParser() {
 
 void TextParser::init_default_rules() {
     markers_.clear();
-    stopwords_ = {
-        "o", "a", "os", "as", "um", "uma", "uns", "umas",
-        "de", "do", "da", "dos", "das", "em", "no", "na", "nos", "nas",
-        "por", "para", "com", "sem", "sob", "sobre", "que", "se", "e", "ou",
-        "the", "an", "of", "in", "on", "at", "to", "for", "with", "by", "and", "or", "that", "which",
-        "é", "são", "foi", "ser", "como", "quando", "qual", "quais", "what", "why", "how", "is", "does"
-    };
+    stopwords_.clear();
+    clean_extra_.clear();
+    articles_.clear();
+    prepositions_.clear();
+    pronouns_.clear();
+    relative_pronouns_.clear();
+    subordinators_.clear();
+    conjunctions_.clear();
+    adverbs_.clear();
+    negation_words_.clear();
+    modal_words_.clear();
+    copula_words_.clear();
+    adjective_words_.clear();
+    pp_modifier_prepositions_.clear();
+    feminine_words_.clear();
+    masculine_words_.clear();
+    singular_exceptions_.clear();
+    np_boundary_prepositions_.clear();
+    feminine_articles_.clear();
+    masculine_articles_.clear();
+    plural_articles_.clear();
+    verb_forms_.clear();
+    quantifier_map_.clear();
+    condition_markers_.clear();
+    for (const char* path : {"data/parser_pt.json", "../data/parser_pt.json",
+                             "../../data/parser_pt.json"}) {
+        std::ifstream probe(path);
+        if (probe && load_parser_json(path)) return;
+    }
+}
 
-    auto add_list = [&](const std::vector<std::string>& list, RelationType t) {
-        for (const auto& m : list) {
-            MarkerRule r;
-            r.phrase = utf8_tolower(m);
-            r.words = tokenize(r.phrase);
-            r.type = t;
-            r.reverse_order = (r.phrase == "porque" || r.phrase == "pois" || r.phrase == "because");
-            if (!r.words.empty()) markers_.push_back(std::move(r));
+void TextParser::add_marker_list(const std::vector<std::string>& list, RelationType type) {
+    for (const auto& value : list) {
+        MarkerRule rule;
+        rule.phrase = utf8_tolower(value);
+        rule.words = tokenize(rule.phrase);
+        rule.type = type;
+        rule.reverse_order = reverse_order_markers_.count(rule.phrase) != 0;
+        if (!rule.words.empty()) markers_.push_back(std::move(rule));
+    }
+}
+
+bool TextParser::load_parser_json(const std::string& path) {
+    std::ifstream ifs(path);
+    if (!ifs) return false;
+    std::ostringstream buffer;
+    buffer << ifs.rdbuf();
+    const std::string json = buffer.str();
+
+    auto fill_set = [&](const char* key, std::unordered_set<std::string>& set) {
+        for (const auto& value : extract_json_array(json, key)) set.insert(utf8_tolower(value));
+    };
+    auto fill_map = [&](const char* key, std::unordered_map<std::string, std::string>& map) {
+        for (const auto& value : extract_json_array(json, key)) {
+            const auto eq = value.find('=');
+            if (eq == std::string::npos) continue;
+            map[utf8_tolower(value.substr(0, eq))] = value.substr(eq + 1);
+        }
+    };
+    auto fill_conditions = [&](const char* key) {
+        for (const auto& value : extract_json_array(json, key)) {
+            const auto eq = value.find('=');
+            if (eq == std::string::npos) continue;
+            const auto label = value.substr(eq + 1);
+            ConditionKind kind = ConditionKind::CONDITIONAL;
+            if (label == "TEMPORAL") kind = ConditionKind::TEMPORAL;
+            else if (label == "CAUSAL") kind = ConditionKind::CAUSAL;
+            else if (label == "CONCESSIVE") kind = ConditionKind::CONCESSIVE;
+            else if (label == "CONSECUTIVE") kind = ConditionKind::CONSECUTIVE;
+            condition_markers_[utf8_tolower(value.substr(0, eq))] = kind;
         }
     };
 
-    add_list({"porque", "pois", "causa", "causar", "provoca", "provocar", "gera", "gerar",
-              "produz", "produzir", "leva a", "resulta em", "faz com que", "acarreta",
-              "origina", "logo", "portanto",
-              "causes", "cause", "leads to", "results in", "produces", "produce",
-              "generates", "generate", "triggers", "because"},
-             RelationType::CAUSAL);
-    add_list({"impede", "impedir", "bloqueia", "bloquear", "evita", "evitar",
-              "reduz", "reduzir", "diminui", "neutraliza", "apaga", "apagar",
-              "prevents", "prevent", "blocks", "block", "inhibits", "reduces", "stops"},
-             RelationType::INHIBITS);
-    add_list({"é um", "é uma", "são", "possui", "tem", "contém", "faz parte de",
-              "is a", "is an", "are", "has", "contains", "part of"},
-             RelationType::TAXONOMIC);
-    add_list({"derrete", "derreter", "aquece", "aquecer", "esfria", "esfriar",
-              "queima", "queimar", "evapora", "evaporar", "congela", "congelar", "transforma",
-              "melts", "melt", "heats", "heat", "cools", "cool", "burns", "burn",
-              "evaporates", "freezes", "transforms"},
-             RelationType::ACTION);
+    fill_set("articles", articles_);
+    fill_set("prepositions", prepositions_);
+    fill_set("pronouns", pronouns_);
+    fill_set("relative_pronouns", relative_pronouns_);
+    fill_set("subordinators", subordinators_);
+    fill_set("conjunctions", conjunctions_);
+    fill_set("adverbs", adverbs_);
+    fill_set("negation_words", negation_words_);
+    fill_set("modal_words", modal_words_);
+    fill_set("copula_words", copula_words_);
+    fill_set("adjective_words", adjective_words_);
+    fill_set("pp_modifier_prepositions", pp_modifier_prepositions_);
+    fill_set("feminine_words", feminine_words_);
+    fill_set("masculine_words", masculine_words_);
+    fill_set("singular_exceptions", singular_exceptions_);
+    fill_set("np_boundary_prepositions", np_boundary_prepositions_);
+    fill_set("feminine_articles", feminine_articles_);
+    fill_set("masculine_articles", masculine_articles_);
+    fill_set("plural_articles", plural_articles_);
+    fill_set("stopwords", stopwords_);
+    fill_set("clean_extra", clean_extra_);
+    fill_map("quantifiers", quantifier_map_);
+    fill_conditions("condition_markers");
 
+    verb_forms_.clear();
+    auto add_verb = [&](const std::string& lemma, const char* lang) {
+        verb_forms_.emplace(lemma, lemma);
+        for (auto tense : {GramTense::PRES, GramTense::PAST, GramTense::FUT, GramTense::SUBJ}) {
+            for (auto number : {GramNumber::SING, GramNumber::PLUR}) {
+                auto form = MorphologicalRealizer::conjugate_verb(lemma, tense, number, lang);
+                if (!form.empty() && form != lemma) verb_forms_.emplace(form, lemma);
+            }
+        }
+    };
+    for (const auto& lemma : extract_json_array(json, "verb_lemmas_pt")) add_verb(lemma, "pt");
+    for (const auto& lemma : extract_json_array(json, "verb_lemmas_en")) add_verb(lemma, "en");
+    for (const auto& value : extract_json_array(json, "irregular_verbs")) {
+        const auto eq = value.find('=');
+        if (eq != std::string::npos) verb_forms_[value.substr(0, eq)] = value.substr(eq + 1);
+    }
+
+    markers_.clear();
+    add_marker_list(extract_json_array(json, "causal_markers"), RelationType::CAUSAL);
+    add_marker_list(extract_json_array(json, "inhibitory_markers"), RelationType::INHIBITS);
+    add_marker_list(extract_json_array(json, "taxonomic_markers"), RelationType::TAXONOMIC);
+    add_marker_list(extract_json_array(json, "action_markers"), RelationType::ACTION);
+    add_marker_list(extract_json_array(json, "has_part_markers"), RelationType::HAS_PART);
+    add_marker_list(extract_json_array(json, "part_of_markers"), RelationType::PART_OF);
+    add_marker_list(extract_json_array(json, "function_markers"), RelationType::FUNCTION);
+    add_marker_list(extract_json_array(json, "enables_markers"), RelationType::ENABLES);
+    add_marker_list(extract_json_array(json, "sequence_markers"), RelationType::SEQUENCE);
     std::sort(markers_.begin(), markers_.end(),
               [](const MarkerRule& a, const MarkerRule& b) {
                   return a.words.size() > b.words.size();
               });
+    return !stopwords_.empty() || !markers_.empty();
 }
 
 bool TextParser::load_rules_json(const std::string& path) {
@@ -245,13 +254,20 @@ bool TextParser::load_rules_json(const std::string& path) {
     auto inhib = extract_json_array(json, "inhibitory_markers");
     auto taxon = extract_json_array(json, "taxonomic_markers");
     auto action = extract_json_array(json, "action_markers");
+    auto has_part = extract_json_array(json, "has_part_markers");
+    auto part_of = extract_json_array(json, "part_of_markers");
+    auto function = extract_json_array(json, "function_markers");
+    auto enables = extract_json_array(json, "enables_markers");
+    auto sequence = extract_json_array(json, "sequence_markers");
     auto stops = extract_json_array(json, "stopwords");
 
     if (!stops.empty()) {
         for (const auto& s : stops) stopwords_.insert(utf8_tolower(s));
     }
 
-    if (!causal.empty() || !inhib.empty() || !taxon.empty() || !action.empty()) {
+    if (!causal.empty() || !inhib.empty() || !taxon.empty() || !action.empty() ||
+        !has_part.empty() || !part_of.empty() || !function.empty() ||
+        !enables.empty() || !sequence.empty()) {
         markers_.clear();
         auto add_list = [&](const std::vector<std::string>& list, RelationType t) {
             for (const auto& m : list) {
@@ -259,7 +275,7 @@ bool TextParser::load_rules_json(const std::string& path) {
                 r.phrase = utf8_tolower(m);
                 r.words = tokenize(r.phrase);
                 r.type = t;
-                r.reverse_order = (r.phrase == "porque" || r.phrase == "pois" || r.phrase == "because");
+                r.reverse_order = reverse_order_markers_.count(r.phrase) != 0;
                 if (!r.words.empty()) markers_.push_back(std::move(r));
             }
         };
@@ -267,6 +283,11 @@ bool TextParser::load_rules_json(const std::string& path) {
         add_list(inhib, RelationType::INHIBITS);
         add_list(taxon, RelationType::TAXONOMIC);
         add_list(action, RelationType::ACTION);
+        add_list(has_part, RelationType::HAS_PART);
+        add_list(part_of, RelationType::PART_OF);
+        add_list(function, RelationType::FUNCTION);
+        add_list(enables, RelationType::ENABLES);
+        add_list(sequence, RelationType::SEQUENCE);
         std::sort(markers_.begin(), markers_.end(),
                   [](const MarkerRule& a, const MarkerRule& b) {
                       return a.words.size() > b.words.size();
@@ -351,6 +372,10 @@ std::vector<std::string> TextParser::extract_content_tokens(const std::string& t
 std::string TextParser::clean_phrase(const std::vector<std::string>& tokens, size_t start, size_t end) const {
     while (start < end && is_stopword(tokens[start])) ++start;
     while (end > start && is_stopword(tokens[end - 1])) --end;
+    for (size_t i = start + 1; i < end; ++i) {
+        if (np_boundary_prepositions_.count(tokens[i])) { end = i; break; }
+    }
+    while (end > start && is_stopword(tokens[end - 1])) --end;
     if (start >= end) return "";
 
     std::string res;
@@ -361,14 +386,19 @@ std::string TextParser::clean_phrase(const std::vector<std::string>& tokens, siz
     return res;
 }
 
-GramGender TextParser::infer_gender(const std::string& word) {
-    const std::string w = utf8_tolower(word);
+GramGender TextParser::infer_gender(const std::string& word) const {
+    std::string w = utf8_tolower(word);
+    // Multi-word terms take gender from their head noun, before the first PP.
+    for (const char* separator : {" de ", " do ", " da ", " dos ", " das ",
+                                  " em ", " no ", " na ", " nos ", " nas ",
+                                  " por ", " para ", " com ", " sem "}) {
+        const auto at = w.find(separator);
+        if (at != std::string::npos) { w = w.substr(0, at); break; }
+    }
     if (w.size() >= 2) {
-        if (w == "água" || w == "agua" || w == "energia" || w == "luz" || w == "chama" ||
-            w == "chuva" || w == "nuvem" || w == "nuvens" || w == "gravidade" ||
-            w == "evaporação" || w == "evaporacao" || w == "queda" || w == "força" || w == "forca") {
-            return GramGender::FEM;
-        }
+        if (masculine_words_.count(w)) return GramGender::MASC;
+        if (feminine_words_.count(w)) return GramGender::FEM;
+        if (ends_with(w, "ão") && !masculine_words_.count(w)) return GramGender::FEM;
         auto ends_with = [&](const std::string& suf) {
             return w.size() >= suf.size() && w.compare(w.size() - suf.size(), suf.size(), suf) == 0;
         };
@@ -385,12 +415,16 @@ GramGender TextParser::infer_gender(const std::string& word) {
     return GramGender::MASC;
 }
 
-GramNumber TextParser::infer_number(const std::string& word) {
-    const std::string w = utf8_tolower(word);
+GramNumber TextParser::infer_number(const std::string& word) const {
+    std::string w = utf8_tolower(word);
+    for (const char* separator : {" de ", " do ", " da ", " dos ", " das ",
+                                  " em ", " no ", " na ", " nos ", " nas ",
+                                  " por ", " para ", " com ", " sem "}) {
+        const auto at = w.find(separator);
+        if (at != std::string::npos) { w = w.substr(0, at); break; }
+    }
     if (w.size() >= 4 && w.back() == 's') {
-        if (w == "gás" || w == "gas" || w == "luz" || w == "país" || w == "mais" || w == "menos") {
-            return GramNumber::SING;
-        }
+        if (singular_exceptions_.count(w)) return GramNumber::SING;
         return GramNumber::PLUR;
     }
     return GramNumber::SING;
@@ -439,61 +473,33 @@ const char* TextParser::condition_kind_name(ConditionKind kind) noexcept {
     return "CONDITIONAL";
 }
 
-namespace {
-
-std::string quantifier_for(const std::string& token) {
-    static const std::unordered_map<std::string, std::string> table = {
-        {"todo", "ALL"}, {"todos", "ALL"}, {"toda", "ALL"}, {"todas", "ALL"},
-        {"qualquer", "ANY"}, {"quaisquer", "ANY"}, {"all", "ALL"}, {"every", "ALL"},
-        {"any", "ANY"}, {"algum", "SOME"}, {"alguma", "SOME"}, {"alguns", "SOME"},
-        {"algumas", "SOME"}, {"some", "SOME"}, {"nenhum", "NO"}, {"nenhuma", "NO"},
-        {"none", "NO"}, {"no", "NO"}, {"maioria", "MOST"}, {"most", "MOST"},
-        {"cada", "EACH"}, {"each", "EACH"}
-    };
-    if (auto it = table.find(token); it != table.end()) return it->second;
-    return {};
+std::string TextParser::quantifier_for(const std::string& token) const {
+    const auto it = quantifier_map_.find(token);
+    return it == quantifier_map_.end() ? std::string{} : it->second;
 }
 
-bool negation_token(const std::string& token) {
-    return token == "não" || token == "nao" || token == "nunca" || token == "jamais" ||
-           token == "not" || token == "never" || token == "no";
+bool TextParser::negation_token(const std::string& token) const {
+    return negation_words_.count(token) != 0;
 }
 
-bool modal_token(const std::string& token) {
-    return token == "pode" || token == "podem" || token == "podia" || token == "poderia" ||
-           token == "deve" || token == "devem" || token == "costuma" || token == "costumam" ||
-           token == "can" || token == "could" || token == "may" || token == "might" ||
-           token == "must" || token == "should" || token == "will" || token == "would";
+bool TextParser::modal_token(const std::string& token) const {
+    return modal_words_.count(token) != 0;
 }
 
-bool copula_token(const std::string& lemma) {
-    return lemma == "ser" || lemma == "estar" || lemma == "be" || lemma == "parecer" || lemma == "seem";
+bool TextParser::copula_token(const std::string& lemma) const {
+    return copula_words_.count(lemma) != 0;
 }
 
-bool adjective_token(const std::string& token) {
-    static const char* known[] = {"quente", "frio", "fria", "grande", "pequeno", "pequena",
-        "rápido", "lenta", "lento", "lenta", "novo", "nova", "antigo", "antiga", "sólido",
-        "sólida", "liquido", "líquido", "gasoso", "corrompido", "seguro", "vazio", "cheio",
-        "hot", "cold", "large", "small", "fast", "slow", "new", "old", "solid", "liquid"};
-    for (const auto* word : known) if (token == word) return true;
+bool TextParser::adjective_token(const std::string& token) const {
+    if (adjective_words_.count(token)) return true;
     return token.size() > 4 && (ends_with(token, "oso") || ends_with(token, "osa") ||
         ends_with(token, "ivo") || ends_with(token, "iva") || ends_with(token, "vel") ||
         ends_with(token, "al") || ends_with(token, "il") || ends_with(token, "nte"));
 }
 
-ConditionKind condition_kind_for(const std::string& marker) {
-    if (marker == "quando" || marker == "enquanto" || marker == "when" || marker == "while" ||
-        marker == "antes" || marker == "depois" || marker == "before" || marker == "after")
-        return ConditionKind::TEMPORAL;
-    if (marker == "porque" || marker == "pois" || marker == "because" || marker == "since" ||
-        marker == "já que" || marker == "como")
-        return ConditionKind::CAUSAL;
-    if (marker == "embora" || marker == "apesar" || marker == "although" || marker == "though" ||
-        marker == "even though")
-        return ConditionKind::CONCESSIVE;
-    if (marker == "então" || marker == "then" || marker == "portanto" || marker == "therefore")
-        return ConditionKind::CONSECUTIVE;
-    return ConditionKind::CONDITIONAL;
+ConditionKind TextParser::condition_kind_for(const std::string& marker) const {
+    const auto it = condition_markers_.find(marker);
+    return it == condition_markers_.end() ? ConditionKind::CONDITIONAL : it->second;
 }
 
 struct DepToken {
@@ -507,45 +513,8 @@ struct DepToken {
     std::string deprel;
 };
 
-} // namespace
-
 ParsedDocument TextParser::parse_dependencies(const std::string& text) const {
     ParsedDocument doc;
-    static const std::unordered_set<std::string> articles = {
-        "o", "a", "os", "as", "um", "uma", "uns", "umas", "the", "an"
-    };
-    static const std::unordered_set<std::string> prepositions = {
-        "de", "do", "da", "dos", "das", "em", "no", "na", "nos", "nas", "por", "pelo",
-        "pela", "para", "com", "sem", "sob", "sobre", "entre", "até", "of", "in", "on",
-        "at", "to", "for", "with", "by", "without", "from", "into"
-    };
-    static const std::unordered_set<std::string> pronouns = {
-        "ele", "ela", "eles", "elas", "isso", "isto", "esse", "essa", "este", "esta",
-        "aquele", "aquela", "eu", "tu", "nós", "você", "vocês",
-        "he", "she", "it", "they", "this", "that", "these", "those", "we", "you", "i"
-    };
-    static const std::unordered_set<std::string> relative_pronouns = {
-        "que", "quem", "qual", "quais", "which", "who", "whom", "that", "cujo", "cuja"
-    };
-    static const std::unordered_set<std::string> subordinators = {
-        "se", "if", "quando", "when", "enquanto", "while", "porque", "because", "pois",
-        "embora", "although", "though", "caso", "since", "unless", "sempre"
-    };
-    static const std::unordered_set<std::string> conjunctions = {
-        "e", "ou", "mas", "porém", "contudo", "entretanto", "and", "or", "but", "however"
-    };
-    static const std::unordered_set<std::string> adverbs = {
-        "não", "nao", "nunca", "jamais", "sempre", "muito", "muita", "muitos", "muitas",
-        "só", "so", "também", "tambem", "já", "ja", "ainda", "aqui", "lá", "la", "ali",
-        "ontem", "hoje", "amanhã", "amanha", "rapidamente", "lentamente", "bem", "mal",
-        "not", "never", "always", "very", "only", "also", "already", "still", "here",
-        "there", "yesterday", "today", "tomorrow", "quickly", "slowly", "well", "badly",
-        "mais", "menos", "more", "less", "quase", "almost"
-    };
-    static const std::unordered_set<std::string> phrase_deprels = {
-        "det", "nummod", "amod", "compound", "flat", "nmod"
-    };
-
     auto relation_type = [&](const std::string& lemma) {
         const auto canonical = lemmatize_simple(lemma);
         for (const auto& rule : markers_)
@@ -566,12 +535,12 @@ ParsedDocument TextParser::parse_dependencies(const std::string& text) const {
             token.number = infer_number(token.form);
             const auto quantity = quantifier_for(token.form);
             if (!quantity.empty()) { token.upos = "DET"; token.quantifier = quantity; continue; }
-            if (articles.count(token.form)) { token.upos = "DET"; continue; }
-            if (prepositions.count(token.form)) { token.upos = "ADP"; continue; }
-            if (conjunctions.count(token.form)) { token.upos = "CCONJ"; continue; }
-            if (subordinators.count(token.form)) { token.upos = "SCONJ"; continue; }
-            if (relative_pronouns.count(token.form) || pronouns.count(token.form)) { token.upos = "PRON"; continue; }
-            if (adverbs.count(token.form)) {
+            if (articles_.count(token.form)) { token.upos = "DET"; continue; }
+            if (prepositions_.count(token.form)) { token.upos = "ADP"; continue; }
+            if (conjunctions_.count(token.form)) { token.upos = "CCONJ"; continue; }
+            if (subordinators_.count(token.form)) { token.upos = "SCONJ"; continue; }
+            if (relative_pronouns_.count(token.form) || pronouns_.count(token.form)) { token.upos = "PRON"; continue; }
+            if (adverbs_.count(token.form)) {
                 token.upos = "ADV";
                 token.negated = negation_token(token.form);
                 continue;
@@ -613,7 +582,7 @@ ParsedDocument TextParser::parse_dependencies(const std::string& text) const {
         std::vector<bool> future_verb(static_cast<size_t>(n), false);
 
         for (int i = 1; i < n; ++i) {
-            if (t[static_cast<size_t>(i)].upos != "PRON" || !relative_pronouns.count(forms[static_cast<size_t>(i)])) continue;
+            if (t[static_cast<size_t>(i)].upos != "PRON" || !relative_pronouns_.count(forms[static_cast<size_t>(i)])) continue;
             const int previous = i - 1;
             const auto previous_upos = t[static_cast<size_t>(previous)].upos;
             if (previous_upos != "NOUN" && previous_upos != "PRON" && previous_upos != "ADJ") continue;
@@ -664,8 +633,7 @@ ParsedDocument TextParser::parse_dependencies(const std::string& text) const {
             t[static_cast<size_t>(i)].deprel = "aux";
             if (modal_token(forms[static_cast<size_t>(i)]))
                 modality_of_verb[static_cast<size_t>(target)] = forms[static_cast<size_t>(i)];
-            if (forms[static_cast<size_t>(i)] == "will" || forms[static_cast<size_t>(i)] == "vai" ||
-                forms[static_cast<size_t>(i)] == "irá" || forms[static_cast<size_t>(i)] == "ira")
+            if (future_auxiliaries_.count(forms[static_cast<size_t>(i)]))
                 future_verb[static_cast<size_t>(target)] = true;
         }
         auto next_nominal = [&](int from) {
@@ -723,31 +691,61 @@ ParsedDocument TextParser::parse_dependencies(const std::string& text) const {
             else { token.head = verb + 1; token.deprel = already_object ? "iobj" : "obj"; }
         }
 
+        // Shared noun-phrase chunker. It expands the seed over determiners,
+        // adjectives and (only) de/do/da/dos/das PPs. This keeps "motor de
+        // combustão interna" together without swallowing verbal obliques such
+        // as "conecta o êmbolo à árvore".
+        auto is_de_pp = [&](int at) {
+            if (at < 0 || at >= n || t[static_cast<size_t>(at)].upos != "ADP") return false;
+            const auto& word = t[static_cast<size_t>(at)].form;
+            return pp_modifier_prepositions_.count(word) != 0;
+        };
         auto phrase = [&](int seed) {
-            std::vector<int> selected;
-            std::vector<bool> visited(static_cast<size_t>(n), false);
-            std::function<void(int)> collect = [&](int idx) {
-                if (idx < 0 || idx >= n || visited[static_cast<size_t>(idx)]) return;
-                visited[static_cast<size_t>(idx)] = true;
-                const auto& token = t[static_cast<size_t>(idx)];
-                if (token.upos == "DET" || token.upos == "ADP" || token.upos == "ADV" ||
-                    token.upos == "SCONJ" || token.upos == "CCONJ" || token.upos == "AUX" ||
-                    token.upos == "VERB") return;
-                selected.push_back(idx);
-                for (int j = 0; j < n; ++j) {
-                    if (t[static_cast<size_t>(j)].head != idx + 1) continue;
-                    if (!phrase_deprels.count(t[static_cast<size_t>(j)].deprel)) continue;
-                    collect(j);
-                }
+            if (seed < 0 || seed >= n) return std::string{};
+            int start = seed, end = seed;
+            auto extend_left_np = [&](int& at) {
+                while (at > 0 && (t[static_cast<size_t>(at - 1)].upos == "DET" ||
+                                  t[static_cast<size_t>(at - 1)].upos == "ADJ" ||
+                                  t[static_cast<size_t>(at - 1)].upos == "NUM")) --at;
             };
-            collect(seed);
-            std::sort(selected.begin(), selected.end());
-            std::string out;
-            for (int idx : selected) {
-                if (!out.empty()) out += " ";
-                out += t[static_cast<size_t>(idx)].form;
+            extend_left_np(start);
+            // If the seed is the object of a nominal "de" PP, move to its head.
+            while (start >= 2 && is_de_pp(start - 1)) {
+                int head = start - 2;
+                extend_left_np(head);
+                if (head < 0 || (t[static_cast<size_t>(head)].upos != "NOUN" &&
+                                 t[static_cast<size_t>(head)].upos != "PROPN" &&
+                                 t[static_cast<size_t>(head)].upos != "PRON")) break;
+                start = head;
+                extend_left_np(start);
             }
-            if (out.empty() && seed >= 0 && seed < n) out = t[static_cast<size_t>(seed)].form;
+            int guard = 0;
+            while (end + 1 < n && guard++ < 16) {
+                const auto next = t[static_cast<size_t>(end + 1)].upos;
+                if (next == "ADJ" || next == "NUM") { ++end; continue; }
+                // A postposed bare noun often acts as a compound/adjectival
+                // modifier in Portuguese ("combustão interna" when "interna"
+                // is not tagged as ADJ).
+                if ((next == "NOUN" || next == "PROPN") &&
+                    (t[static_cast<size_t>(end)].upos == "NOUN" ||
+                     t[static_cast<size_t>(end)].upos == "PROPN")) { ++end; continue; }
+                if (!is_de_pp(end + 1)) break;
+                int at = end + 2;
+                if (at < n && t[static_cast<size_t>(at)].upos == "DET") ++at;
+                while (at < n && (t[static_cast<size_t>(at)].upos == "ADJ" ||
+                                  t[static_cast<size_t>(at)].upos == "NUM")) ++at;
+                if (at >= n || (t[static_cast<size_t>(at)].upos != "NOUN" &&
+                                t[static_cast<size_t>(at)].upos != "PROPN")) break;
+                end = at;
+                while (end + 1 < n && t[static_cast<size_t>(end + 1)].upos == "ADJ") ++end;
+            }
+            std::string out;
+            for (int i = start; i <= end; ++i) {
+                if (t[static_cast<size_t>(i)].upos == "DET") continue;
+                if (!out.empty()) out += " ";
+                out += t[static_cast<size_t>(i)].form;
+            }
+            if (out.empty()) out = t[static_cast<size_t>(seed)].form;
             return out;
         };
 
@@ -785,7 +783,7 @@ ParsedDocument TextParser::parse_dependencies(const std::string& text) const {
             if (relative_verb[static_cast<size_t>(v)] && relative_antecedent[static_cast<size_t>(v)] >= 0)
                 subject = relative_antecedent[static_cast<size_t>(v)];
             else if (subject >= 0 && t[static_cast<size_t>(subject)].upos == "PRON" &&
-                     relative_pronouns.count(t[static_cast<size_t>(subject)].form)) {
+                     relative_pronouns_.count(t[static_cast<size_t>(subject)].form)) {
                 for (int j = subject - 1; j >= 0; --j) {
                     if ((t[static_cast<size_t>(j)].upos == "NOUN" || t[static_cast<size_t>(j)].upos == "PRON") &&
                         t[static_cast<size_t>(j)].deprel != "obj") { subject = j; break; }
@@ -891,17 +889,11 @@ ParsedDocument TextParser::parse_text(const std::string& text) const {
         std::string sent_modality;
         GramTense sent_tense = GramTense::PRES;
         for (const auto& t : toks) {
-            if (t == "não" || t == "nao" || t == "nunca" || t == "jamais" ||
-                t == "not" || t == "never" || t == "don't" || t == "doesn't") {
-                sent_negated = true;
-            }
-            if (t == "pode" || t == "podem" || t == "costuma" || t == "costumam" ||
-                t == "deve" || t == "devem" || t == "can" || t == "may" || t == "must") {
-                sent_modality = t;
-            }
-            if (t == "vai" || t == "irá" || t == "ira" || t == "will") {
+            if (negation_token(t)) sent_negated = true;
+            if (modal_token(t)) sent_modality = t;
+            if (future_auxiliaries_.count(t)) {
                 sent_tense = GramTense::FUT;
-            } else if (t == "foi" || t == "gerou" || t == "causou" || t == "derreteu" || t == "apagou") {
+            } else if (past_tense_markers_.count(t)) {
                 sent_tense = GramTense::PAST;
             }
         }
@@ -961,7 +953,7 @@ ParsedDocument TextParser::parse_text(const std::string& text) const {
                 // predicate of the sentence ("O calor, que derrete gelo, ...").
                 bool inside_relative = false;
                 for (size_t k = 1; k < pos; ++k) {
-                    if (toks[k] != "que" && toks[k] != "quem" && toks[k] != "which" && toks[k] != "who")
+                    if (!relative_pronouns_.count(toks[k]))
                         continue;
                     std::string ignored;
                     if (k > 0 && !general_verb_lemma(toks[k - 1], ignored)) { inside_relative = true; break; }
@@ -978,14 +970,8 @@ ParsedDocument TextParser::parse_text(const std::string& text) const {
                 if (eq) {
                     // Exclude negation/modality tokens from subject/object spans
                     size_t lhs_end = pos;
-                    while (lhs_end > 0 && (toks[lhs_end - 1] == "não" || toks[lhs_end - 1] == "nao" ||
-                                           toks[lhs_end - 1] == "nunca" || toks[lhs_end - 1] == "pode" ||
-                                           toks[lhs_end - 1] == "costuma" || toks[lhs_end - 1] == "deve" ||
-                                           toks[lhs_end - 1] == "can" || toks[lhs_end - 1] == "not" ||
-                                           toks[lhs_end - 1] == "never" || toks[lhs_end - 1] == "jamais" ||
-                                           toks[lhs_end - 1] == "podem" || toks[lhs_end - 1] == "devem" ||
-                                           toks[lhs_end - 1] == "costumam" || toks[lhs_end - 1] == "will" ||
-                                           toks[lhs_end - 1] == "vai" || toks[lhs_end - 1] == "irá")) {
+                    while (lhs_end > 0 && (negation_token(toks[lhs_end - 1]) ||
+                                           modal_token(toks[lhs_end - 1]))) {
                         --lhs_end;
                     }
                     std::string lhs = clean_phrase(toks, 0, lhs_end);
@@ -1017,16 +1003,9 @@ ParsedDocument TextParser::parse_text(const std::string& text) const {
                         tr.subj_number = infer_number(tr.subject);
                         tr.obj_gender = infer_gender(tr.object);
                         tr.obj_number = infer_number(tr.object);
-                        auto agree_article = [&](size_t begin, GramGender& gender, GramNumber& number) {
-                            if (begin >= toks.size()) return;
-                            const auto& article = toks[begin];
-                            if (article == "a" || article == "as" || article == "uma" || article == "umas") gender = GramGender::FEM;
-                            if (article == "o" || article == "os" || article == "um" || article == "uns") gender = GramGender::MASC;
-                            if (article == "as" || article == "os" || article == "umas" || article == "uns") number = GramNumber::PLUR;
-                        };
                         if (!rule.reverse_order) {
-                            agree_article(0, tr.subj_gender, tr.subj_number);
-                            agree_article(pos + mlen, tr.obj_gender, tr.obj_number);
+                            agree_with_article(toks, 0, tr.subj_gender, tr.subj_number);
+                            agree_with_article(toks, pos + mlen, tr.obj_gender, tr.obj_number);
                         }
                         doc.triples.push_back(tr);
 
@@ -1047,12 +1026,8 @@ ParsedDocument TextParser::parse_text(const std::string& text) const {
         if (matched || hypothetical) continue;
 
         // Interrogatives and imperatives do not assert facts.
-        static const char* question_starts[] = {
-            "por que", "porque", "why", "o que", "what", "qual", "which", "quem", "who",
-            "como", "how", "quando", "when", "onde", "where", "quanto", "quantos", "how many"
-        };
         bool question = s.find('?') != std::string::npos;
-        for (const auto* start : question_starts)
+        for (const auto& start : question_starts_)
             if (lower_sentence.starts_with(start)) { question = true; break; }
         if (question) continue;
 
@@ -1088,7 +1063,7 @@ ParsedDocument TextParser::parse_text(const std::string& text) const {
                     return;
                 }
             }
-            const auto subject = clean_span(parts, 0, verb_at, stopwords_);
+            const auto subject = clean_span(parts, 0, verb_at);
             if (subject.empty()) return;
             // Multiple coordinated complements: "gera calor e luz".
             std::vector<std::vector<std::string>> complement_groups;
@@ -1102,7 +1077,7 @@ ParsedDocument TextParser::parse_text(const std::string& text) const {
             }
             if (!current.empty()) complement_groups.push_back(std::move(current));
             for (const auto& group : complement_groups) {
-                const auto object = clean_span(group, 0, group.size(), stopwords_);
+                const auto object = clean_span(group, 0, group.size());
                 if (object.empty() || object == subject) continue;
                 ParsedTriple tr;
                 tr.source_text = s;
@@ -1130,7 +1105,7 @@ ParsedDocument TextParser::parse_text(const std::string& text) const {
         };
         bool relative_sentence = false;
         for (size_t k = 1; k < toks.size(); ++k) {
-            if (toks[k] != "que" && toks[k] != "quem" && toks[k] != "which" && toks[k] != "who") continue;
+            if (!relative_pronouns_.count(toks[k])) continue;
             std::string ignored;
             if (!general_verb_lemma(toks[k - 1], ignored)) { relative_sentence = true; break; }
         }
@@ -1150,9 +1125,20 @@ ParsedDocument TextParser::parse_text(const std::string& text) const {
     };
     for (const auto& conditional : dependencies.conditionals)
         if (!same_conditional(conditional)) doc.conditionals.push_back(conditional);
+    auto relation_lemma = [&](const std::string& relation) {
+        std::string lemma;
+        if (general_verb_lemma(relation, lemma)) return lemma;
+        return TextParser::lemmatize_simple(relation);
+    };
     for (const auto& triple : dependencies.triples) {
+        // "motor de combustão interna" must not yield the object
+        // "combustão interna"; the PP belongs to the subject.
+        if (!triple.object.empty() && triple.object != triple.subject &&
+            triple.subject.find(triple.object) != std::string::npos) continue;
         auto existing = std::find_if(doc.triples.begin(), doc.triples.end(), [&](const ParsedTriple& value) {
-            return value.subject == triple.subject && value.relation == triple.relation && value.object == triple.object;
+            return value.subject == triple.subject &&
+                   relation_lemma(value.relation) == relation_lemma(triple.relation) &&
+                   value.object == triple.object;
         });
         if (existing != doc.triples.end()) {
             if (existing->quantifier.empty()) existing->quantifier = triple.quantifier;
@@ -1161,6 +1147,22 @@ ParsedDocument TextParser::parse_text(const std::string& text) const {
                 existing->condition_kind = triple.condition_kind;
             }
             if (existing->relative_antecedent.empty()) existing->relative_antecedent = triple.relative_antecedent;
+            continue;
+        }
+        // The rule fallback often keeps the whole clause as the object
+        // ("trabalho pela expansão..."). The dependency parse has a cleaner
+        // NP. When they share subject+relation, prefer the dependency triple.
+        auto weaker = std::find_if(doc.triples.begin(), doc.triples.end(), [&](const ParsedTriple& value) {
+            if (value.subject != triple.subject) return false;
+            const bool same_type = value.type == triple.type &&
+                (triple.type == RelationType::TAXONOMIC || triple.type == RelationType::PROPERTY);
+            if (!same_type && relation_lemma(value.relation) != relation_lemma(triple.relation)) return false;
+            if (value.object == triple.object) return false;
+            return value.object.find(triple.object) != std::string::npos ||
+                   triple.object.find(value.object) != std::string::npos;
+        });
+        if (weaker != doc.triples.end()) {
+            *weaker = triple;
             continue;
         }
         doc.triples.push_back(triple);
@@ -1182,15 +1184,12 @@ ParsedDocument TextParser::parse_conllu(const std::string& conllu_text) const {
     std::string line;
     std::vector<MorphToken> sentence;
     auto base = [](const std::string& rel) { return rel.substr(0, rel.find(':')); };
-    auto negative = [](const MorphToken& t) {
-        const auto w = TextParser::utf8_tolower(t.lemma);
-        return t.negated || w == "não" || w == "nunca" || w == "jamais" ||
-               w == "not" || w == "never";
+    auto negative = [&](const MorphToken& t) {
+        return t.negated || negation_token(TextParser::utf8_tolower(t.lemma));
     };
-    auto modal = [](const MorphToken& t) {
+    auto modal = [&](const MorphToken& t) {
         const auto w = TextParser::utf8_tolower(t.lemma);
-        return w == "poder" || w == "dever" || w == "can" || w == "may" ||
-               w == "must" || w == "could" || w == "should";
+        return modal_token(w) || w == "poder" || w == "dever";
     };
     auto flush = [&]() {
         if (sentence.empty()) return;
@@ -1255,7 +1254,7 @@ ParsedDocument TextParser::parse_conllu(const std::string& conllu_text) const {
                         if (tense == GramTense::INF) tense = child.tense;
                     }
                     if (child.tense != GramTense::PRES) tense = child.tense;
-                    if (child.lemma == "will") tense = GramTense::FUT;
+                    if (future_auxiliaries_.count(child.lemma)) tense = GramTense::FUT;
                 }
             }
             if (v.upos != "VERB" && !cop) continue;

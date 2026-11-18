@@ -33,7 +33,7 @@ void print_usage() {
               << "  cognicore evaluate-fluency --model <dir_modelo> --input <texto> [--out <relatorio.json>]\n"
               << "  cognicore write --model <dir_modelo> --topic <assunto> [--sections N] [--paragraphs N] [--realizer strict|lexical|fluent] [--out <arquivo.md>]\n"
               << "  cognicore math --expr \"2x + 3 = 11\" [--model <dir_modelo>]\n"
-              << "  cognicore chat --model <dir_modelo> [--workspace <dir>] [--realizer strict|lexical|fluent] [--lang cpp|py|js] [--online-learning] [--debug]\n";
+              << "  cognicore chat --model <dir_modelo> [--workspace <dir>] [--realizer strict|lexical|fluent] [--lang cpp|py|js] [--online-learning] [--shape brief|explain|document] [--debug]\n";
 }
 
 std::string get_arg(int argc, char** argv, const std::string& flag, const std::string& def = "") {
@@ -115,12 +115,17 @@ std::string extract_json_str(const std::string& line, const std::string& key) {
     throw std::invalid_argument("JSONL: unterminated string");
 }
 
-void load_rules_if_present(TextParser& parser) {
-    if (fs::exists("data/linguistic_rules.json")) {
-        parser.load_rules_json("data/linguistic_rules.json");
-    } else if (fs::exists("../data/linguistic_rules.json")) {
-        parser.load_rules_json("../data/linguistic_rules.json");
+void load_rules_if_present(TextParser& parser, const std::string& model_dir = {}) {
+    if (!model_dir.empty()) {
+        const auto model_file = fs::path(model_dir) / "parser_pt.json";
+        if (fs::exists(model_file) && parser.load_parser_json(model_file.string())) return;
     }
+    for (const char* path : {"data/parser_pt.json", "../data/parser_pt.json",
+                             "../../data/parser_pt.json"}) {
+        if (fs::exists(path) && parser.load_parser_json(path)) return;
+    }
+    if (fs::exists("data/linguistic_rules.json")) parser.load_rules_json("data/linguistic_rules.json");
+    else if (fs::exists("../data/linguistic_rules.json")) parser.load_rules_json("../data/linguistic_rules.json");
 }
 
 int cmd_ingest_books(int argc, char** argv) {
@@ -151,7 +156,7 @@ int cmd_ingest_books(int argc, char** argv) {
     if (fs::exists(model_dir + "/codebook.bin")) {
         if (!bundle.load(model_dir, false)) { std::cerr << "Erro ao carregar modelo existente.\n"; return 1; }
     }
-    load_rules_if_present(bundle.parser);
+    load_rules_if_present(bundle.parser, model_dir);
 
     std::vector<std::string> files;
     if (fs::is_directory(input)) {
@@ -198,6 +203,8 @@ int cmd_ingest_books(int argc, char** argv) {
             bundle.graph.add_fact(tr.subject, tr.relation, tr.object, tr.type, tr.confidence, false,
                                   tr.negated, tr.tense, tr.modality, tr.subj_gender, tr.subj_number,
                                   tr.obj_gender, tr.obj_number);
+            bundle.terms.add_term(tr.subject);
+            bundle.terms.add_term(tr.object);
             HyperVector addr = HyperVector::from_token(tr.subject);
             HyperVector data = HyperVector::from_token(tr.object);
             bundle.sdm.write(addr, data, use_gpu);
@@ -253,7 +260,7 @@ int cmd_ingest_corpus(int argc, char** argv) {
         std::cerr << "Erro ao carregar modelo existente.\n";
         return 1;
     }
-    load_rules_if_present(bundle.parser);
+    load_rules_if_present(bundle.parser, model_dir);
     fs::create_directories(model_dir);
     const auto manifest_path = fs::path(model_dir) / "ingestion_manifest.jsonl";
     std::unordered_map<std::string, std::string> processed;
@@ -304,6 +311,8 @@ int cmd_ingest_corpus(int argc, char** argv) {
                                       triple.confidence, false, triple.negated, triple.tense,
                                       triple.modality, triple.subj_gender, triple.subj_number,
                                       triple.obj_gender, triple.obj_number);
+                bundle.terms.add_term(triple.subject);
+                bundle.terms.add_term(triple.object);
                 bundle.sdm.write(HyperVector::from_token(triple.subject),
                                  HyperVector::from_token(triple.object), use_gpu);
             }
@@ -379,7 +388,7 @@ int cmd_train_dialogue(int argc, char** argv) {
         bundle.tsetlin = TsetlinMachine(config);
         bundle.has_sparse_tsetlin = false;
     }
-    load_rules_if_present(bundle.parser);
+    load_rules_if_present(bundle.parser, model_dir);
 
     std::ifstream ifs(input);
     if (!ifs) {
@@ -621,10 +630,21 @@ int cmd_write(int argc, char** argv) {
     else if (mode != "strict" && mode != "fluent" && mode != "lexical") { std::cerr << "Realizador inválido.\n"; return 1; }
     const size_t sections = std::stoul(get_arg(argc, argv, "--sections", "5"));
     const size_t paragraphs = std::stoul(get_arg(argc, argv, "--paragraphs", "2"));
-    DocumentPlanner planner;
-    const auto plan = planner.plan(topic, bundle.graph, bundle.codebook, bundle.language_rules,
-                                   sections, paragraphs);
-    const auto text = planner.realize(plan, *mouth, bundle.language_rules);
+    ResponseConstraints constraints;
+    constraints.force_document = true;
+    constraints.sections = sections;
+    constraints.paragraphs = paragraphs;
+    ContentPlanner content;
+    auto content_plan = content.plan(topic, bundle.graph, bundle.codebook, bundle.language_rules,
+                                     &bundle.terms, constraints, &bundle.parser);
+    DocumentPlan plan = content_plan.document;
+    if (plan.sections.empty()) {
+        DocumentPlanner fallback;
+        plan = fallback.plan(topic, bundle.graph, bundle.codebook, bundle.language_rules,
+                             sections, paragraphs, &bundle.terms, &bundle.parser);
+    }
+    DocumentPlanner renderer;
+    const auto text = renderer.realize(plan, *mouth, bundle.language_rules);
     if (text.empty()) { std::cerr << "Não há fatos suficientes sobre o tópico.\n"; return 1; }
     const auto output = get_arg(argc, argv, "--out");
     if (!output.empty()) { std::ofstream file(output); if (!file) return 1; file << text; }
@@ -673,7 +693,7 @@ int cmd_chat(int argc, char** argv) {
         std::cerr << "Erro ao carregar modelo de " << model_dir << "\n";
         return 1;
     }
-    load_rules_if_present(bundle.parser);
+    load_rules_if_present(bundle.parser, model_dir);
 
     if (!workspace.empty()) {
         bundle.code_graph = CodeGraph{};
@@ -694,6 +714,11 @@ int cmd_chat(int argc, char** argv) {
     } else { std::cerr << "Realizador inválido: use strict, lexical ou fluent.\n"; return 1; }
     AssistantSession session(bundle);
     session.set_online_learning(has_flag(argc, argv, "--online-learning"));
+    const auto shape_arg = get_arg(argc, argv, "--shape");
+    if (shape_arg == "brief") session.set_shape_override(ResponseShape::BRIEF);
+    else if (shape_arg == "explain" || shape_arg == "explanatory") session.set_shape_override(ResponseShape::EXPLANATORY);
+    else if (shape_arg == "document") session.set_shape_override(ResponseShape::DOCUMENT);
+    else if (!shape_arg.empty()) { std::cerr << "Shape inválido: use brief, explain ou document.\n"; return 1; }
     const auto language = string_to_code_lang(get_arg(argc, argv, "--lang", "cpp"));
     if (language == CodeLanguage::UNKNOWN) { std::cerr << "Linguagem inválida.\n"; return 1; }
     std::ofstream history(session_dir + "/conversation.jsonl", std::ios::app);

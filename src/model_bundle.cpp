@@ -285,6 +285,8 @@ ModelBundle::InferenceTrace ModelBundle::infer_and_respond(const std::string& us
                 graph.add_fact(tr.subject, tr.relation, tr.object, tr.type, tr.confidence, true,
                                tr.negated, tr.tense, tr.modality, tr.subj_gender, tr.subj_number,
                                tr.obj_gender, tr.obj_number);
+                terms.add_term(tr.subject);
+                terms.add_term(tr.object);
                 codebook.get_or_add(tr.subject);
                 codebook.get_or_add(tr.object);
                 HyperVector addr = HyperVector::from_token(tr.subject);
@@ -316,7 +318,7 @@ ModelBundle::InferenceTrace ModelBundle::infer_and_respond(const std::string& us
                 if (entity.starts_with("meu ")) entity.erase(0, 4);
                 if (entity.starts_with("minha ")) entity.erase(0, 6);
                 episodic_memory.remember(entity, "ram_capacity", quantity->surface, user_text);
-                context_memory.observe_entity(entity, TextParser::infer_gender(entity), TextParser::infer_number(entity));
+                context_memory.observe_entity(entity, parser.infer_gender(entity), parser.infer_number(entity));
                 learned_fact = true;
             }
         }
@@ -687,6 +689,7 @@ bool ModelBundle::save(const std::string& dir_path) const {
     fs::create_directories(dir_path, ec);
     if (ec) return false;
     if (!language_rules.save(dir_path + "/language_rules.json")) return false;
+    terms.save(dir_path + "/terms.tsv");
     if (!lexicon.save(dir_path + "/lexicon.bin")) return false;
     if (!coherence.save(dir_path + "/coherence.bin")) return false;
     if (!code_patterns.save(dir_path + "/code_patterns.jsonl")) return false;
@@ -894,6 +897,9 @@ bool ModelBundle::load(const std::string& dir_path, bool use_mmap) {
         language_rules.load(dir_path + "/language_rules.json");
     else if (language_rules.empty())
         language_rules.load_default();
+    if (fs::exists(dir_path + "/parser_pt.json")) parser.load_parser_json(dir_path + "/parser_pt.json");
+    terms.clear();
+    if (fs::exists(dir_path + "/terms.tsv")) terms.load(dir_path + "/terms.tsv");
     lexicon.load_synonyms(language_rules);
     if (code_patterns.empty()) code_patterns.load_default();
     if (fs::exists(dir_path + "/lexicon.bin")) lexicon.load(dir_path + "/lexicon.bin");
@@ -1020,8 +1026,8 @@ bool ModelBundle::load(const std::string& dir_path, bool use_mmap) {
             if (magic == MAGIC_GR && (!r.read_pod(g) || !r.read_pod(num))) return false;
             if (!r.read_string(nodes[i].name)) return false;
             if (magic == MAGIC_GR_LEGACY) {
-                g = static_cast<uint8_t>(TextParser::infer_gender(nodes[i].name));
-                num = static_cast<uint8_t>(TextParser::infer_number(nodes[i].name));
+                g = static_cast<uint8_t>(parser.infer_gender(nodes[i].name));
+                num = static_cast<uint8_t>(parser.infer_number(nodes[i].name));
             }
             nodes[i].gender = static_cast<GramGender>(g);
             nodes[i].number = static_cast<GramNumber>(num);
@@ -1215,7 +1221,7 @@ size_t ModelBundle::estimated_ram_bytes() const noexcept {
     total += lexicon.memory_bytes() + coherence.memory_bytes();
     total += has_sparse_tsetlin ? sparse_tsetlin.memory_bytes() : tsetlin.memory_bytes();
     if (has_context_policy) total += context_policy.memory_bytes();
-    total += graph.memory_bytes();
+    total += graph.memory_bytes() + terms.memory_bytes();
     total += realizer.memory_bytes() + fluent_realizer.memory_bytes() + code_graph.memory_bytes();
     for (const auto& pair : realizer_pairs) total += pair.capacity();
     for (const auto& [user, assistant] : episodes) total += user.capacity() + assistant.capacity();

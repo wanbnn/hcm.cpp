@@ -3,6 +3,7 @@
 #include "core/causal_graph.hpp"
 
 #include <string>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -92,11 +93,16 @@ public:
     ParsedDocument parse_conllu(const std::string& conllu_text) const;
     static const char* condition_kind_name(ConditionKind kind) noexcept;
 
-    static GramGender infer_gender(const std::string& word);
-    static GramNumber infer_number(const std::string& word);
+    GramGender infer_gender(const std::string& word) const;
+    GramNumber infer_number(const std::string& word) const;
     static std::string lemmatize_simple(const std::string& word);
 
     bool is_stopword(const std::string& tok) const;
+
+    /// Loads the model-owned lexical/syntactic resource file (parser_pt.json).
+    /// All word lists, verb lemmas, markers and condition labels live there;
+    /// the user can edit the model file without recompiling.
+    bool load_parser_json(const std::string& path);
 
 private:
     struct MarkerRule {
@@ -107,10 +113,51 @@ private:
     };
 
     void init_default_rules();
+    void add_marker_list(const std::vector<std::string>& list, RelationType type);
+    bool general_verb_lemma(const std::string& token, std::string& lemma) const;
+    size_t find_main_verb(const std::vector<std::string>& tokens, std::string& lemma,
+                          size_t from = 1) const;
+    std::string clean_span(const std::vector<std::string>& tokens, size_t start,
+                           size_t end) const;
+    std::string quantifier_for(const std::string& token) const;
+    bool negation_token(const std::string& token) const;
+    bool modal_token(const std::string& token) const;
+    bool copula_token(const std::string& lemma) const;
+    bool adjective_token(const std::string& token) const;
+    ConditionKind condition_kind_for(const std::string& marker) const;
+    void agree_with_article(const std::vector<std::string>& tokens, size_t begin,
+                            GramGender& gender, GramNumber& number) const;
     std::string clean_phrase(const std::vector<std::string>& tokens, size_t start, size_t end) const;
 
     std::vector<MarkerRule> markers_;
     std::unordered_set<std::string> stopwords_;
+    std::unordered_set<std::string> clean_extra_;
+    std::unordered_set<std::string> articles_;
+    std::unordered_set<std::string> prepositions_;
+    std::unordered_set<std::string> pronouns_;
+    std::unordered_set<std::string> relative_pronouns_;
+    std::unordered_set<std::string> subordinators_;
+    std::unordered_set<std::string> conjunctions_;
+    std::unordered_set<std::string> adverbs_;
+    std::unordered_set<std::string> negation_words_;
+    std::unordered_set<std::string> modal_words_;
+    std::unordered_set<std::string> copula_words_;
+    std::unordered_set<std::string> adjective_words_;
+    std::unordered_set<std::string> pp_modifier_prepositions_;
+    std::unordered_set<std::string> feminine_words_;
+    std::unordered_set<std::string> masculine_words_;
+    std::unordered_set<std::string> singular_exceptions_;
+    std::unordered_set<std::string> np_boundary_prepositions_;
+    std::unordered_set<std::string> feminine_articles_;
+    std::unordered_set<std::string> masculine_articles_;
+    std::unordered_set<std::string> plural_articles_;
+    std::unordered_set<std::string> question_starts_;
+    std::unordered_set<std::string> reverse_order_markers_;
+    std::unordered_set<std::string> future_auxiliaries_;
+    std::unordered_set<std::string> past_tense_markers_;
+    std::unordered_map<std::string, std::string> verb_forms_;
+    std::unordered_map<std::string, std::string> quantifier_map_;
+    std::unordered_map<std::string, ConditionKind> condition_markers_;
 };
 
 } // namespace cognicore

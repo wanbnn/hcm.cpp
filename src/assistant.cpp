@@ -152,22 +152,43 @@ AssistantReply AssistantSession::respond(const std::string& input, CodeLanguage 
     const bool document_request = !math_answer && !resource_context &&
         rules.contains_any(lower, rules.document_cues) &&
         !rules.contains_any(lower, rules.code_cues);
+    ResponseConstraints constraints;
+    constraints.force_document = document_request;
+    if (shape_override_) {
+        if (*shape_override_ == ResponseShape::BRIEF) constraints.force_brief = true;
+        if (*shape_override_ == ResponseShape::DOCUMENT) constraints.force_document = true;
+    }
+    ContentPlan content_plan;
+    const bool content_candidate = !math_answer && !resource_context &&
+        reply.route != AssistantRoute::CODE_GENERATE_OR_PATCH &&
+        reply.route != AssistantRoute::CODE_QUERY_OR_EXPLAIN;
+    if (content_candidate) {
+        ContentPlanner content;
+        content_plan = content.plan(input, model_.graph, model_.codebook, rules,
+                                    &model_.terms, constraints, &model_.parser);
+    }
+    const bool use_content = content_candidate && !content_plan.document.sections.empty() &&
+        (content_plan.shape != ResponseShape::BRIEF || document_request);
+    MorphologicalRealizer fallback(rules);
+    const ISurfaceRealizer& surface = mouth ? *mouth : static_cast<const ISurfaceRealizer&>(fallback);
     if (math_answer) {
         reply.text = *math_answer;
         reply.route = AssistantRoute::MATH_REASONING;
+    } else if (use_content) {
+        reply.route = content_plan.shape == ResponseShape::DOCUMENT
+            ? AssistantRoute::DOCUMENT_GENERATION : AssistantRoute::CAUSAL_REASONING;
+        RenderOptions options;
+        options.title = content_plan.shape == ResponseShape::DOCUMENT;
+        options.headings = content_plan.shape == ResponseShape::DOCUMENT;
+        DocumentPlanner planner;
+        reply.text = planner.realize(content_plan.document, surface, rules, options);
+        reply.trace.decision_override = "CONTENT: " + content_plan.rationale;
     } else if (document_request) {
         reply.route = AssistantRoute::DOCUMENT_GENERATION;
         const auto topic = document_topic(lower, rules);
-        DocumentPlanner planner;
-        const auto plan = planner.plan(topic.empty() ? lower : topic, model_.graph,
-                                       model_.codebook, rules, 5, 2);
-        MorphologicalRealizer fallback(rules);
-        const auto& surface = mouth ? *mouth : static_cast<const ISurfaceRealizer&>(fallback);
-        reply.text = planner.realize(plan, surface, rules);
-        if (reply.text.empty())
-            reply.text = rules.render_template(rules.document_empty_templates, rules.language, topic,
-                                               {{"topic", topic}});
-        reply.trace.decision_override = "DOCUMENT: " + plan.rationale;
+        reply.text = rules.render_template(rules.document_empty_templates, rules.language, topic,
+                                           {{"topic", topic}});
+        reply.trace.decision_override = "DOCUMENT: sem conteúdo suficiente";
     } else if (reply.route == AssistantRoute::CODE_GENERATE_OR_PATCH) {
         const auto requested_language = detect_requested_language(TextParser::utf8_tolower(effective_input), language, model_.language_rules);
         const auto result = synthesizer_.synthesize(effective_input, requested_language,

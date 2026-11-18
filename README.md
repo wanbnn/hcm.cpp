@@ -186,7 +186,14 @@ educacionais públicos — cerca de 66 MB de texto, 10,4 milhões de tokens e
 vocabulário VSA de 48 mil tipos. O treino simbólico roda em HIP/ROCm e a
 inferência conversacional continua em CPU. A v3.1 também aceita fatos
 curados com `--facts-only` (grafo + SDM, sem deslocar o codebook); o conjunto
-`data/conversation_pt/engine_facts.txt` adiciona fatos de motor. Ficha:
+`data/conversation_pt/engine_facts.txt` adiciona fatos de motor.
+
+O parser agora extrai NPs multi-palavra e resolve aliases. As listas
+lexicais/sintáticas vivem em `parser_pt.json` no diretório do modelo, não no
+código: o usuário pode editar verbos, preposições, marcadores, gênero e
+stopwords. O `ContentPlanner` escolhe o formato da resposta pelo conteúdo
+(BRIEF/EXPLANATORY/DOCUMENT); o chat e o `write` compartilham o mesmo
+`DocumentPlanner` como renderizador. Ficha:
 [modelo v3.1](docs/MODEL_CONVERSA_PT_FLUENT_V31.md).
 
 ## Benchmarks próprios

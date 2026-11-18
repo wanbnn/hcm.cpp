@@ -3,6 +3,8 @@
 #include "core/causal_graph.hpp"
 #include "core/language_rules.hpp"
 #include "core/realizer.hpp"
+#include "core/term_resolver.hpp"
+#include "core/text_parser.hpp"
 
 #include <cstdint>
 #include <string>
@@ -43,6 +45,12 @@ struct DocumentPlan {
     std::string rationale;
 };
 
+struct RenderOptions {
+    bool title = true;
+    bool headings = true;
+    size_t max_sentences = 0; // 0 = no limit
+};
+
 /// Hierarchical document generation: goal -> outline -> paragraphs -> sentence
 /// plans. It reasons over the graph before any word is generated, then a
 /// revision pass removes duplicated sentences and mechanical repetition.
@@ -53,11 +61,14 @@ public:
                       const Codebook& codebook,
                       const LanguageRules& rules,
                       size_t max_sections = 4,
-                      size_t paragraphs_per_section = 2) const;
+                      size_t paragraphs_per_section = 2,
+                      const TermResolver* terms = nullptr,
+                      const TextParser* parser_override = nullptr) const;
 
     std::string realize(const DocumentPlan& plan,
                         const ISurfaceRealizer& realizer,
-                        const LanguageRules& rules) const;
+                        const LanguageRules& rules,
+                        const RenderOptions& options = {}) const;
 
     /// Applies deterministic revision: duplicate removal, connector de-repetition,
     /// whitespace/punctuation normalization. It never adds facts.

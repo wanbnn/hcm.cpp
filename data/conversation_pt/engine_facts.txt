@@ -18,3 +18,13 @@ O tempo de compressão comprime a mistura.
 O tempo de combustão produz trabalho.
 O tempo de escapamento expulsa os gases da combustão.
 O motor diesel tem um funcionamento semelhante ao ciclo Otto.
+O motor de combustão interna contém o bloco.
+O motor de combustão interna contém o cabeçote.
+O motor de combustão interna contém o conjunto móvel.
+O conjunto móvel contém a árvore de manivelas.
+O cabeçote contém as válvulas de admissão e escapamento.
+A admissão precede a compressão.
+A compressão precede a combustão.
+A combustão precede o escapamento.
+O motor de combustão interna usa o ciclo Otto.
+O ciclo Otto produz trabalho.

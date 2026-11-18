@@ -14,7 +14,15 @@ enum class RelationType : uint8_t {
     INHIBITS  = 1,
     TAXONOMIC = 2,
     PROPERTY  = 3,
-    ACTION    = 4
+    ACTION    = 4,
+    // Extended ontology for mechanisms and procedures. Appended to preserve
+    // the on-disk numeric values of existing models.
+    HAS_PART  = 5,
+    PART_OF   = 6,
+    FUNCTION  = 7,
+    ENABLES   = 8,
+    SEQUENCE  = 9,
+    PRECEDES  = 10
 };
 
 enum class GramTense : uint8_t {

@@ -100,25 +100,30 @@ DocumentPlan DocumentPlanner::plan(const std::string& topic,
                                    const Codebook& codebook,
                                    const LanguageRules& rules,
                                    size_t max_sections,
-                                   size_t paragraphs_per_section) const {
+                                   size_t paragraphs_per_section,
+                                   const TermResolver* terms,
+                                   const TextParser* parser_override) const {
     DocumentPlan document;
     document.topic = topic;
+    const std::string resolved_topic = terms ? terms->resolve(topic) : lower_ascii(topic);
     const auto title_template = first_or(rules.document_title, "{topic}");
     document.title = title_template;
     const auto title_at = document.title.find("{topic}");
     if (title_at != std::string::npos) document.title.replace(title_at, 7, topic);
 
-    TextParser parser;
+    TextParser local_parser;
+    const TextParser& parser = parser_override ? *parser_override : local_parser;
     const auto topic_tokens = parser.extract_content_tokens(topic);
     std::vector<std::string> seeds;
     for (const auto& node : graph.nodes()) {
         if (node.name.empty()) continue;
-        if (lower_ascii(node.name) == lower_ascii(topic) ||
+        if (lower_ascii(node.name) == resolved_topic ||
+            lower_ascii(node.name) == lower_ascii(topic) ||
             std::find(topic_tokens.begin(), topic_tokens.end(), node.name) != topic_tokens.end()) {
             seeds.push_back(node.name);
         }
     }
-    if (seeds.empty()) seeds.push_back(topic);
+    if (seeds.empty()) seeds.push_back(resolved_topic);
     for (const auto& seed : seeds)
         if (graph.find_node(seed) != UINT32_MAX)
             document.used_concepts.push_back(seed);
@@ -215,19 +220,23 @@ DocumentPlan DocumentPlanner::plan(const std::string& topic,
 
 std::string DocumentPlanner::realize(const DocumentPlan& plan,
                                      const ISurfaceRealizer& realizer,
-                                     const LanguageRules& rules) const {
+                                     const LanguageRules& rules,
+                                     const RenderOptions& options) const {
     std::ostringstream out;
-    if (!plan.title.empty()) out << "# " << plan.title << "\n\n";
+    if (options.title && !plan.title.empty()) out << "# " << plan.title << "\n\n";
     size_t connector_index = 0;
+    size_t emitted_sentences = 0;
     std::unordered_set<std::string> emitted_paragraphs;
     for (const auto& section : plan.sections) {
-        if (!section.heading.empty()) out << "## " << section.heading << "\n\n";
+        std::ostringstream section_out;
         for (size_t p = 0; p < section.paragraphs.size(); ++p) {
             const auto& paragraph = section.paragraphs[p];
             std::string paragraph_text;
             for (const auto& sentence : paragraph.sentences) {
+                if (options.max_sentences && emitted_sentences >= options.max_sentences) break;
                 auto text = realizer.realize(sentence.plan);
                 if (text.empty()) continue;
+                ++emitted_sentences;
                 if (text.back() != '.' && text.back() != '!' && text.back() != '?') text += '.';
                 if (!paragraph_text.empty()) paragraph_text += " ";
                 paragraph_text += text;
@@ -246,8 +255,16 @@ std::string DocumentPlanner::realize(const DocumentPlan& plan,
             }
             while (!normalized.empty() && (normalized.back() == '.' || normalized.back() == ' ')) normalized.pop_back();
             if (!emitted_paragraphs.insert(normalized).second) continue;
-            out << revise(paragraph_text, rules) << "\n\n";
+            const auto revised = revise(paragraph_text, rules);
+            if (revised.empty()) continue;
+            section_out << revised << "\n\n";
+            if (options.max_sentences && emitted_sentences >= options.max_sentences) break;
         }
+        if (!section_out.str().empty()) {
+            if (options.headings && !section.heading.empty()) out << "## " << section.heading << "\n\n";
+            out << section_out.str();
+        }
+        if (options.max_sentences && emitted_sentences >= options.max_sentences) break;
     }
     return out.str();
 }

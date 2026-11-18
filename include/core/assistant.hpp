@@ -1,6 +1,8 @@
 #pragma once
+#include "core/content_planner.hpp"
 #include "core/model_bundle.hpp"
 #include "core/code_synthesizer.hpp"
+#include <optional>
 
 namespace cognicore {
 enum class AssistantRoute : uint8_t {
@@ -30,6 +32,8 @@ public:
                            const ISurfaceRealizer* mouth = nullptr);
     void set_online_learning(bool enabled) { online_learning_ = enabled; }
     bool online_learning() const { return online_learning_; }
+    void set_shape_override(ResponseShape shape) { shape_override_ = shape; }
+    void clear_shape_override() { shape_override_.reset(); }
 private:
     ModelBundle& model_;
     AssistantRouter router_;
@@ -37,6 +41,7 @@ private:
     AssistantRoute last_route_ = AssistantRoute::CONVERSATIONAL_GENERAL;
     std::string last_code_task_;
     bool online_learning_ = false;
+    std::optional<ResponseShape> shape_override_;
 };
 std::string json_escape(const std::string& text);
 std::string realizer_pair_json(const ParsedTriple& triple);

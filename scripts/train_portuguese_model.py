@@ -28,6 +28,9 @@ def main():
     if args.model.exists() and any(args.model.iterdir()) and not args.resume_policy:
         parser.error('model directory is not empty; use a new path or --resume-policy')
     args.model.mkdir(parents=True, exist_ok=True)
+    parser_seed = Path(__file__).resolve().parents[1] / 'data/parser_pt.json'
+    if parser_seed.exists():
+        shutil.copy2(parser_seed, args.model / 'parser_pt.json')
     logs = args.model / 'training_logs'
     logs.mkdir(exist_ok=True)
     env = dict(os.environ, OMP_NUM_THREADS='4')

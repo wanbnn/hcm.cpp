@@ -104,6 +104,8 @@ set(COGNICORE_SOURCES
     src/lexicalized_realizer.cpp
     src/math_solver.cpp
     src/symbolic_math.cpp
+    src/term_resolver.cpp
+    src/content_planner.cpp
     src/model_bundle.cpp
 )
 
@@ -222,6 +224,12 @@ add_executable(test_marco18_chat_unified tests/test_marco18_chat_unified.cpp)
 target_link_libraries(test_marco18_chat_unified PRIVATE cognicore_lib)
 target_compile_options(test_marco18_chat_unified PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)
 add_test(NAME test_marco18_chat_unified COMMAND test_marco18_chat_unified)
+
+add_executable(test_marco19_content tests/test_marco19_content.cpp)
+target_link_libraries(test_marco19_content PRIVATE cognicore_lib)
+target_compile_options(test_marco19_content PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)
+target_compile_definitions(test_marco19_content PRIVATE COGNICORE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
+add_test(NAME test_marco19_content COMMAND test_marco19_content)
 
 add_executable(test_no_fallback tests/test_no_fallback.cpp)
 target_link_libraries(test_no_fallback PRIVATE cognicore_lib)
