@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/causal_graph.hpp"
+#include "core/code_ast.hpp"
 #include "core/realizer.hpp"
 #include "core/sdm.hpp"
 #include "core/text_parser.hpp"
@@ -19,6 +20,9 @@ struct ModelBundle {
     SparseTsetlinModel sparse_tsetlin;
     bool has_sparse_tsetlin = false;
     CausalGraph graph;
+    CodeGraph code_graph;
+    std::vector<std::string> realizer_pairs;
+    std::vector<std::pair<std::string, std::string>> episodes;
     ConstructionGrammarRealizer realizer;
     TextParser parser;
 
@@ -33,7 +37,8 @@ struct ModelBundle {
         std::vector<CausalPath> paths;
         std::string response;
     };
-    InferenceTrace infer_and_respond(const std::string& user_text, bool online_learn = true);
+    InferenceTrace infer_and_respond(const std::string& user_text, bool online_learn = true,
+                                     const ISurfaceRealizer* surface = nullptr);
 
     /// Saves all model components into `dir_path` in compact binary format.
     bool save(const std::string& dir_path) const;

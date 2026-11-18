@@ -1,9 +1,71 @@
 cmake_minimum_required(VERSION 3.20)
-project(cognicore VERSION 0.1.0 LANGUAGES CXX)
+project(cognicore VERSION 0.2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+include(FetchContent)
+
+FetchContent_Declare(
+    tree_sitter
+    GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter.git
+    GIT_TAG        v0.25.3
+    GIT_SHALLOW    TRUE
+    SOURCE_SUBDIR _cognicore_no_upstream_targets
+)
+FetchContent_Declare(
+    ts_cpp
+    GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-cpp.git
+    GIT_TAG        v0.23.4
+    GIT_SHALLOW    TRUE
+    SOURCE_SUBDIR _cognicore_no_upstream_targets
+)
+FetchContent_Declare(
+    ts_python
+    GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-python.git
+    GIT_TAG        v0.23.6
+    GIT_SHALLOW    TRUE
+    SOURCE_SUBDIR _cognicore_no_upstream_targets
+)
+FetchContent_Declare(
+    ts_javascript
+    GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-javascript.git
+    GIT_TAG        v0.23.1
+    GIT_SHALLOW    TRUE
+    SOURCE_SUBDIR _cognicore_no_upstream_targets
+)
+
+FetchContent_Declare(
+    ts_typescript
+    GIT_REPOSITORY https://github.com/tree-sitter/tree-sitter-typescript.git
+    GIT_TAG v0.23.2
+    GIT_SHALLOW TRUE
+    SOURCE_SUBDIR _cognicore_no_upstream_targets
+)
+
+FetchContent_MakeAvailable(tree_sitter ts_cpp ts_python ts_javascript ts_typescript)
+
+add_library(ts_bundle STATIC
+    ${tree_sitter_SOURCE_DIR}/lib/src/lib.c
+    ${ts_cpp_SOURCE_DIR}/src/parser.c
+    ${ts_cpp_SOURCE_DIR}/src/scanner.c
+    ${ts_python_SOURCE_DIR}/src/parser.c
+    ${ts_python_SOURCE_DIR}/src/scanner.c
+    ${ts_javascript_SOURCE_DIR}/src/parser.c
+    ${ts_javascript_SOURCE_DIR}/src/scanner.c
+    ${ts_typescript_SOURCE_DIR}/typescript/src/parser.c
+    ${ts_typescript_SOURCE_DIR}/typescript/src/scanner.c
+)
+target_include_directories(ts_bundle PUBLIC
+    ${tree_sitter_SOURCE_DIR}/lib/include
+    ${tree_sitter_SOURCE_DIR}/lib/src
+)
+set_source_files_properties(${ts_cpp_SOURCE_DIR}/src/parser.c ${ts_cpp_SOURCE_DIR}/src/scanner.c PROPERTIES INCLUDE_DIRECTORIES "${ts_cpp_SOURCE_DIR}/src")
+set_source_files_properties(${ts_python_SOURCE_DIR}/src/parser.c ${ts_python_SOURCE_DIR}/src/scanner.c PROPERTIES INCLUDE_DIRECTORIES "${ts_python_SOURCE_DIR}/src")
+set_source_files_properties(${ts_javascript_SOURCE_DIR}/src/parser.c ${ts_javascript_SOURCE_DIR}/src/scanner.c PROPERTIES INCLUDE_DIRECTORIES "${ts_javascript_SOURCE_DIR}/src")
+set_source_files_properties(${ts_typescript_SOURCE_DIR}/typescript/src/parser.c ${ts_typescript_SOURCE_DIR}/typescript/src/scanner.c PROPERTIES INCLUDE_DIRECTORIES "${ts_typescript_SOURCE_DIR}/typescript/src")
+set_target_properties(ts_bundle PROPERTIES C_STANDARD 11)
 
 option(USE_ROCM "Enable AMD HIP/ROCm GPU acceleration" OFF)
 
@@ -25,6 +87,10 @@ set(COGNICORE_SOURCES
     src/causal_graph.cpp
     src/text_parser.cpp
     src/realizer.cpp
+    src/morphological_realizer.cpp
+    src/assistant.cpp
+    src/code_ast.cpp
+    src/code_synthesizer.cpp
     src/model_bundle.cpp
 )
 
@@ -36,6 +102,7 @@ endif()
 
 add_library(cognicore_lib STATIC ${COGNICORE_SOURCES})
 target_include_directories(cognicore_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(cognicore_lib PUBLIC ts_bundle)
 target_compile_options(cognicore_lib PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:${COGNICORE_CXX_FLAGS}>
 )
@@ -82,3 +149,37 @@ target_link_libraries(test_pipeline PRIVATE cognicore_lib)
 target_compile_options(test_pipeline PRIVATE ${COGNICORE_CXX_FLAGS})
 target_compile_definitions(test_pipeline PRIVATE COGNICORE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 add_test(NAME test_pipeline COMMAND test_pipeline)
+
+add_executable(test_marco7_morph tests/test_marco7_morph.cpp)
+target_link_libraries(test_marco7_morph PRIVATE cognicore_lib)
+target_compile_options(test_marco7_morph PRIVATE ${COGNICORE_CXX_FLAGS})
+add_test(NAME test_marco7_morph COMMAND test_marco7_morph)
+
+# Assertions in the test suite must remain active in Release builds.
+foreach(test_target test_vsa test_sdm test_tsetlin test_hip_equiv test_pipeline test_marco7_morph)
+    target_compile_options(${test_target} PRIVATE -UNDEBUG)
+endforeach()
+
+foreach(milestone 8_code_ast 9_code_synth)
+    add_executable(test_marco${milestone} tests/test_marco${milestone}.cpp)
+    target_link_libraries(test_marco${milestone} PRIVATE cognicore_lib)
+    target_compile_options(test_marco${milestone} PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)
+    target_compile_definitions(test_marco${milestone} PRIVATE COGNICORE_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
+    add_test(NAME test_marco${milestone} COMMAND test_marco${milestone})
+endforeach()
+
+foreach(milestone 10_symbolic 11_assistant)
+    add_executable(test_marco${milestone} tests/test_marco${milestone}.cpp)
+    target_link_libraries(test_marco${milestone} PRIVATE cognicore_lib)
+    target_compile_options(test_marco${milestone} PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)
+    add_test(NAME test_marco${milestone} COMMAND test_marco${milestone})
+endforeach()
+
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME test_cli_phase2 COMMAND ${Python3_EXECUTABLE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli_phase2.py $<TARGET_FILE:cognicore>)
+endif()
+# Keep tests reproducible when several build configurations run concurrently.
+get_property(cognicore_tests DIRECTORY PROPERTY TESTS)
+set_tests_properties(${cognicore_tests} PROPERTIES ENVIRONMENT "OMP_NUM_THREADS=4")

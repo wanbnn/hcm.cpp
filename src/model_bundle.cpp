@@ -1,4 +1,6 @@
 #include "core/model_bundle.hpp"
+#include "core/morphological_realizer.hpp"
+#include "core/assistant.hpp"
 
 #include <algorithm>
 #include <cstring>
@@ -123,7 +125,8 @@ private:
 constexpr uint32_t MAGIC_CB = 0x434F4743; // COGC
 constexpr uint32_t MAGIC_SDM = 0x434F4753; // COGS
 constexpr uint32_t MAGIC_TM = 0x434F4754; // COGT
-constexpr uint32_t MAGIC_GR = 0x434F4747; // COGG
+constexpr uint32_t MAGIC_GR_LEGACY = 0x434F4747;
+constexpr uint32_t MAGIC_GR = 0x434F4732; // COGG
 constexpr uint32_t MAGIC_RL = 0x434F4752; // COGR
 
 } // namespace
@@ -157,7 +160,7 @@ std::vector<uint64_t> ModelBundle::encode_dialogue_features(const std::string& u
     return feats;
 }
 
-ModelBundle::InferenceTrace ModelBundle::infer_and_respond(const std::string& user_text, bool online_learn) {
+ModelBundle::InferenceTrace ModelBundle::infer_and_respond(const std::string& user_text, bool online_learn, const ISurfaceRealizer* surface) {
     InferenceTrace trace;
     auto all_toks = parser.tokenize(user_text);
     auto content_toks = parser.extract_content_tokens(user_text);
@@ -169,7 +172,9 @@ ModelBundle::InferenceTrace ModelBundle::infer_and_respond(const std::string& us
         auto parsed = parser.parse_text(user_text);
         if (!parsed.triples.empty()) {
             for (const auto& tr : parsed.triples) {
-                graph.add_fact(tr.subject, tr.relation, tr.object, tr.type, tr.confidence, true);
+                graph.add_fact(tr.subject, tr.relation, tr.object, tr.type, tr.confidence, true,
+                               tr.negated, tr.tense, tr.modality, tr.subj_gender, tr.subj_number,
+                               tr.obj_gender, tr.obj_number);
                 codebook.get_or_add(tr.subject);
                 codebook.get_or_add(tr.object);
                 HyperVector addr = HyperVector::from_token(tr.subject);
@@ -177,6 +182,7 @@ ModelBundle::InferenceTrace ModelBundle::infer_and_respond(const std::string& us
                 sdm.write(addr, data);
                 learned_fact = true;
             }
+            for (auto& pair : realizer_document_pairs(parsed)) realizer_pairs.push_back(std::move(pair));
             for (const auto& cf : parsed.frames) {
                 realizer.add_frame(cf);
             }
@@ -232,8 +238,10 @@ ModelBundle::InferenceTrace ModelBundle::infer_and_respond(const std::string& us
     SemanticPlan plan;
     plan.intent = trace.intent;
     plan.paths = trace.paths;
+    for (const auto& token : all_toks)
+        if (token == "why" || token == "what" || token == "how" || token == "the" || token == "hello") plan.language = "en";
     plan.query_concepts = trace.activated_concepts.empty() ? content_toks : trace.activated_concepts;
-    trace.response = realizer.realize(plan);
+    trace.response = surface ? surface->realize(plan) : realizer.realize(plan);
 
     return trace;
 }
@@ -318,6 +326,8 @@ bool ModelBundle::save(const std::string& dir_path) const {
         for (const auto& node : graph.nodes()) {
             w.write_pod(node.id);
             w.write_pod(node.frequency);
+            w.write_pod(static_cast<uint8_t>(node.gender));
+            w.write_pod(static_cast<uint8_t>(node.number));
             w.write_string(node.name);
         }
         for (const auto& rel : graph.relations()) {
@@ -326,6 +336,44 @@ bool ModelBundle::save(const std::string& dir_path) const {
         if (ne > 0) {
             w.write_bytes(graph.edges().data(), ne * sizeof(GraphEdge));
         }
+    }
+
+    // Optional Phase-2 code index, independent of the legacy model files.
+    {
+        BinaryWriter w(dir_path + "/code_index.bin");
+        if (!w.ok()) return false;
+        w.write_pod(uint32_t(0x434F4432));
+        auto strings = [&](const std::vector<std::string>& values) {
+            w.write_pod(uint32_t(values.size()));
+            for (const auto& value : values) w.write_string(value);
+        };
+        w.write_pod(uint32_t(code_graph.symbols().size()));
+        for (const auto& sym : code_graph.symbols()) {
+            w.write_string(sym.name); w.write_string(sym.return_type);
+            strings(sym.param_types); strings(sym.param_names); strings(sym.includes_or_imports);
+            w.write_string(sym.documentation); w.write_string(sym.canonical_ast);
+            w.write_string(sym.body_snippet); w.write_string(sym.file_path);
+            w.write_pod(uint8_t(sym.lang)); w.write_pod(sym.ast_vsa);
+        }
+        w.write_pod(uint32_t(code_graph.edges().size()));
+        for (const auto& edge : code_graph.edges()) {
+            w.write_pod(edge.src); w.write_pod(edge.dst); w.write_pod(uint8_t(edge.type));
+        }
+        w.write_pod(uint32_t(code_graph.patterns().size()));
+        for (const auto& pattern : code_graph.patterns()) {
+            w.write_string(pattern.id_tag); w.write_pod(uint8_t(pattern.lang));
+            w.write_string(pattern.template_code); strings(pattern.required_includes); w.write_pod(pattern.pattern_vsa);
+        }
+        std::ofstream pairs(dir_path + "/realizer_pairs.jsonl");
+        if (!pairs) return false;
+        for (const auto& pair : realizer_pairs) pairs << pair << '\n';
+    }
+
+    {
+        BinaryWriter w(dir_path + "/episodes.bin");
+        if (!w.ok()) return false;
+        w.write_pod(uint32_t(0x45504931)); w.write_pod(uint32_t(episodes.size()));
+        for (const auto& [user, assistant] : episodes) { w.write_string(user); w.write_string(assistant); }
     }
 
     // 5. Realizer
@@ -444,20 +492,103 @@ bool ModelBundle::load(const std::string& dir_path, bool use_mmap) {
         MappedReader r(dir_path + "/graph.bin", use_mmap);
         if (!r.valid()) return false;
         uint32_t magic = 0, nn = 0, nr = 0, ne = 0;
-        if (!r.read_pod(magic) || magic != MAGIC_GR ||
+        if (!r.read_pod(magic) || (magic != MAGIC_GR && magic != MAGIC_GR_LEGACY) ||
             !r.read_pod(nn) || !r.read_pod(nr) || !r.read_pod(ne)) return false;
         std::vector<GraphNode> nodes(nn);
         for (uint32_t i = 0; i < nn; ++i) {
-            if (!r.read_pod(nodes[i].id) || !r.read_pod(nodes[i].frequency) ||
-                !r.read_string(nodes[i].name)) return false;
+            uint8_t g = 0, num = 0;
+            if (!r.read_pod(nodes[i].id) || !r.read_pod(nodes[i].frequency)) return false;
+            if (magic == MAGIC_GR && (!r.read_pod(g) || !r.read_pod(num))) return false;
+            if (!r.read_string(nodes[i].name)) return false;
+            if (magic == MAGIC_GR_LEGACY) {
+                g = static_cast<uint8_t>(TextParser::infer_gender(nodes[i].name));
+                num = static_cast<uint8_t>(TextParser::infer_number(nodes[i].name));
+            }
+            nodes[i].gender = static_cast<GramGender>(g);
+            nodes[i].number = static_cast<GramNumber>(num);
         }
         std::vector<std::string> rels(nr);
         for (uint32_t i = 0; i < nr; ++i) {
             if (!r.read_string(rels[i])) return false;
         }
         std::vector<GraphEdge> edges(ne);
-        if (ne > 0 && !r.read_bytes(edges.data(), ne * sizeof(GraphEdge))) return false;
+        if (magic == MAGIC_GR_LEGACY) {
+            struct LegacyEdge {
+                uint32_t src, rel, dst;
+                RelationType type;
+                uint32_t frequency;
+                float confidence;
+                bool user_taught;
+            };
+            for (auto& e : edges) {
+                LegacyEdge old{};
+                if (!r.read_pod(old)) return false;
+                e.src = old.src; e.rel = old.rel; e.dst = old.dst;
+                e.type = old.type; e.frequency = old.frequency;
+                e.confidence = old.confidence; e.user_taught = old.user_taught;
+            }
+        } else if (ne > 0 && !r.read_bytes(edges.data(), ne * sizeof(GraphEdge))) return false;
+        for (const auto& e : edges)
+            if (e.src >= nn || e.dst >= nn || e.rel >= nr || e.modality[15] != '\0') return false;
         graph.load_raw(std::move(nodes), std::move(rels), std::move(edges));
+    }
+
+    code_graph = CodeGraph{};
+    if (fs::exists(dir_path + "/code_index.bin")) {
+        MappedReader r(dir_path + "/code_index.bin", use_mmap);
+        uint32_t magic = 0, count = 0;
+        auto size = [&](uint32_t& n) { return r.read_pod(n) && n <= 1000000; };
+        auto strings = [&](std::vector<std::string>& values) {
+            uint32_t n = 0;
+            if (!size(n)) return false;
+            values.resize(n);
+            for (auto& value : values) if (!r.read_string(value)) return false;
+            return true;
+        };
+        if (!r.valid() || !r.read_pod(magic) || magic != 0x434F4432 || !size(count)) return false;
+        std::vector<CodeSymbol> symbols(count);
+        for (uint32_t i = 0; i < count; ++i) {
+            auto& sym = symbols[i]; uint8_t lang = 0; sym.id = i;
+            if (!r.read_string(sym.name) || !r.read_string(sym.return_type) ||
+                !strings(sym.param_types) || !strings(sym.param_names) || !strings(sym.includes_or_imports) ||
+                !r.read_string(sym.documentation) || !r.read_string(sym.canonical_ast) ||
+                !r.read_string(sym.body_snippet) || !r.read_string(sym.file_path) ||
+                !r.read_pod(lang) || lang > uint8_t(CodeLanguage::UNKNOWN) || !r.read_pod(sym.ast_vsa)) return false;
+            sym.lang = static_cast<CodeLanguage>(lang);
+        }
+        if (!size(count)) return false;
+        std::vector<CodeEdge> edges(count);
+        for (auto& edge : edges) {
+            uint8_t type;
+            if (!r.read_pod(edge.src) || !r.read_pod(edge.dst) || !r.read_pod(type) ||
+                edge.src >= symbols.size() || edge.dst >= symbols.size() || type > 5) return false;
+            edge.type = static_cast<CodeEdgeType>(type);
+        }
+        if (!size(count)) return false;
+        std::vector<AstPattern> patterns(count);
+        for (auto& pattern : patterns) {
+            uint8_t lang;
+            if (!r.read_string(pattern.id_tag) || !r.read_pod(lang) || !r.read_string(pattern.template_code) ||
+                !strings(pattern.required_includes) || !r.read_pod(pattern.pattern_vsa)) return false;
+            pattern.lang = static_cast<CodeLanguage>(lang);
+        }
+        code_graph.load_raw(std::move(symbols), std::move(edges), std::move(patterns));
+    }
+    realizer_pairs.clear();
+    {
+        std::ifstream pairs(dir_path + "/realizer_pairs.jsonl");
+        std::string pair;
+        while (std::getline(pairs, pair)) if (!pair.empty()) realizer_pairs.push_back(std::move(pair));
+    }
+
+    episodes.clear();
+    if (fs::exists(dir_path + "/episodes.bin")) {
+        MappedReader r(dir_path + "/episodes.bin", use_mmap);
+        uint32_t magic = 0, count = 0;
+        if (!r.valid() || !r.read_pod(magic) || magic != 0x45504931 || !r.read_pod(count) || count > 128) return false;
+        episodes.resize(count);
+        for (auto& [user, assistant] : episodes)
+            if (!r.read_string(user) || !r.read_string(assistant)) return false;
     }
 
     // 5. Realizer
@@ -511,7 +642,9 @@ size_t ModelBundle::estimated_ram_bytes() const noexcept {
     total += sdm.memory_bytes();
     total += has_sparse_tsetlin ? sparse_tsetlin.memory_bytes() : tsetlin.memory_bytes();
     total += graph.memory_bytes();
-    total += realizer.memory_bytes();
+    total += realizer.memory_bytes() + code_graph.memory_bytes();
+    for (const auto& pair : realizer_pairs) total += pair.capacity();
+    for (const auto& [user, assistant] : episodes) total += user.capacity() + assistant.capacity();
     return total;
 }
 

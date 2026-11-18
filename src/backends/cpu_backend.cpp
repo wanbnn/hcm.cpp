@@ -151,7 +151,7 @@ void tsetlin_eval_clauses(const int8_t* ta_states,
     const size_t stride = 2 * num_features;
 
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) if (num_clauses >= 64)
+#pragma omp parallel for schedule(static) if (num_clauses * num_features >= 32768)
 #endif
     for (size_t c = 0; c < num_clauses; ++c) {
         const int8_t* row = ta_states + c * stride;
@@ -204,7 +204,7 @@ void tsetlin_update_clauses(int8_t* ta_states,
     const size_t stride = 2 * num_features;
 
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static) if (num_clauses >= 32)
+#pragma omp parallel for schedule(static) if (num_clauses * num_features >= 32768)
 #endif
     for (size_t c = 0; c < num_clauses; ++c) {
         if (hash_to_float(step_seed, c, 0xFFFFFFFFULL) > update_prob) {

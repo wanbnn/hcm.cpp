@@ -1,4 +1,6 @@
 #include "core/model_bundle.hpp"
+#include "core/assistant.hpp"
+#include "core/morphological_realizer.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -15,11 +17,14 @@ namespace {
 
 void print_usage() {
     std::cout << "Uso:\n"
-              << "  cognicore ingest-books --input <dir_ou_txt> --model <dir_modelo> [--use-gpu]\n"
+              << "  cognicore ingest-books --input <dir_ou_txt> --model <dir_modelo> [--parser rules|conllu] [--use-gpu]\n"
               << "  cognicore train-dialogue --input <conversas.jsonl> --model <dir_modelo> [--epochs 20] [--use-gpu]\n"
               << "  cognicore consolidate --model <dir_modelo>\n"
               << "  cognicore stats --model <dir_modelo>\n"
-              << "  cognicore chat --model <dir_modelo> [--debug]\n";
+              << "  cognicore ingest-code --repo <dir> --model <dir_modelo> [--use-gpu]\n"
+              << "  cognicore code --model <dir_modelo> --workspace <dir> --lang cpp|py|js --task <descrição>\n"
+              << "  cognicore export-realizer-dataset --model <dir_modelo> --out <pairs.jsonl>\n"
+              << "  cognicore chat --model <dir_modelo> [--workspace <dir>] [--realizer symbolic|morphological] [--lang cpp|py|js] [--debug]\n";
 }
 
 std::string get_arg(int argc, char** argv, const std::string& flag, const std::string& def = "") {
@@ -73,6 +78,11 @@ int cmd_ingest_books(int argc, char** argv) {
     const std::string input = get_arg(argc, argv, "--input");
     const std::string model_dir = get_arg(argc, argv, "--model");
     const bool use_gpu = has_flag(argc, argv, "--use-gpu");
+    const std::string parser_mode = get_arg(argc, argv, "--parser", "rules");
+    if (parser_mode != "rules" && parser_mode != "conllu") {
+        std::cerr << "Parser indisponível: use rules ou conllu (pré-processado).\n";
+        return 1;
+    }
     if (input.empty() || model_dir.empty()) {
         print_usage();
         return 1;
@@ -80,14 +90,14 @@ int cmd_ingest_books(int argc, char** argv) {
 
     ModelBundle bundle;
     if (fs::exists(model_dir + "/codebook.bin")) {
-        bundle.load(model_dir, false);
+        if (!bundle.load(model_dir, false)) { std::cerr << "Erro ao carregar modelo existente.\n"; return 1; }
     }
     load_rules_if_present(bundle.parser);
 
     std::vector<std::string> files;
     if (fs::is_directory(input)) {
         for (const auto& entry : fs::recursive_directory_iterator(input)) {
-            if (entry.is_regular_file() && entry.path().extension() == ".txt") {
+            if (entry.is_regular_file() && (entry.path().extension() == ".txt" || entry.path().extension() == ".conllu")) {
                 files.push_back(entry.path().string());
             }
         }
@@ -100,7 +110,8 @@ int cmd_ingest_books(int argc, char** argv) {
         const std::string text = read_file_text(fpath);
         if (text.empty()) continue;
 
-        auto doc = bundle.parser.parse_text(text);
+        auto doc = (parser_mode == "conllu" || fs::path(fpath).extension() == ".conllu")
+            ? bundle.parser.parse_conllu(text) : bundle.parser.parse_text(text);
         for (const auto& s_toks : doc.sentences_tokens) {
             bundle.realizer.observe_sentence_tokens(s_toks);
             for (size_t i = 0; i < s_toks.size(); ++i) {
@@ -112,12 +123,15 @@ int cmd_ingest_books(int argc, char** argv) {
             }
         }
         for (const auto& tr : doc.triples) {
-            bundle.graph.add_fact(tr.subject, tr.relation, tr.object, tr.type, tr.confidence);
+            bundle.graph.add_fact(tr.subject, tr.relation, tr.object, tr.type, tr.confidence, false,
+                                  tr.negated, tr.tense, tr.modality, tr.subj_gender, tr.subj_number,
+                                  tr.obj_gender, tr.obj_number);
             HyperVector addr = HyperVector::from_token(tr.subject);
             HyperVector data = HyperVector::from_token(tr.object);
             bundle.sdm.write(addr, data, use_gpu);
             ++total_triples;
         }
+        for (auto& pair : realizer_document_pairs(doc)) bundle.realizer_pairs.push_back(std::move(pair));
         for (const auto& cf : doc.frames) {
             bundle.realizer.add_frame(cf);
         }
@@ -149,7 +163,7 @@ int cmd_train_dialogue(int argc, char** argv) {
 
     ModelBundle bundle;
     if (fs::exists(model_dir + "/codebook.bin")) {
-        bundle.load(model_dir, false);
+        if (!bundle.load(model_dir, false)) { std::cerr << "Erro ao carregar modelo existente.\n"; return 1; }
     }
     load_rules_if_present(bundle.parser);
 
@@ -170,6 +184,8 @@ int cmd_train_dialogue(int argc, char** argv) {
 
         auto toks = bundle.parser.tokenize(text);
         bundle.realizer.observe_sentence_tokens(toks);
+        for (auto& pair : realizer_document_pairs(bundle.parser.parse_text(text)))
+            bundle.realizer_pairs.push_back(std::move(pair));
         X.push_back(bundle.encode_dialogue_features(text));
         y.push_back(static_cast<size_t>(string_to_intent(intent_str)));
     }
@@ -269,13 +285,32 @@ int cmd_chat(int argc, char** argv) {
         return 1;
     }
 
+    const auto workspace = get_arg(argc, argv, "--workspace");
+    if (!workspace.empty() && !fs::is_directory(workspace)) { std::cerr << "Workspace inexistente.\n"; return 1; }
+    const auto session_dir = workspace.empty() ? model_dir : (fs::path(workspace) / ".cognicore").string();
     ModelBundle bundle;
-    if (!bundle.load(model_dir, true)) {
+    if (!bundle.load(fs::exists(session_dir + "/codebook.bin") ? session_dir : model_dir, true)) {
         std::cerr << "Erro ao carregar modelo de " << model_dir << "\n";
         return 1;
     }
     load_rules_if_present(bundle.parser);
 
+    if (!workspace.empty()) {
+        bundle.code_graph = CodeGraph{};
+        TreeSitterCodeParser::ingest_directory(workspace, bundle.code_graph, &bundle.sdm);
+        fs::create_directories(session_dir);
+    }
+    const auto realizer = get_arg(argc, argv, "--realizer", "symbolic");
+    MorphologicalRealizer morphology;
+    const ISurfaceRealizer* mouth = nullptr;
+    if (realizer == "morphological") mouth = &morphology;
+    else if (realizer != "symbolic") {
+        std::cerr << "Realizador inválido: use symbolic ou morphological.\n"; return 1;
+    }
+    AssistantSession session(bundle);
+    const auto language = string_to_code_lang(get_arg(argc, argv, "--lang", "cpp"));
+    if (language == CodeLanguage::UNKNOWN) { std::cerr << "Linguagem inválida.\n"; return 1; }
+    std::ofstream history(session_dir + "/conversation.jsonl", std::ios::app);
     std::cout << "CogniCore CPU-only chat pronto. Digite 'sair' para encerrar.\n";
     std::string line;
     while (true) {
@@ -284,9 +319,14 @@ int cmd_chat(int argc, char** argv) {
         if (line == "sair" || line == "exit" || line == "quit") break;
         if (line.empty()) continue;
 
-        auto trace = bundle.infer_and_respond(line, true);
+        auto reply = session.respond(line, language, mouth);
+        auto trace = reply.trace;
+        trace.response = reply.text;
+        if (history) history << "{\"user\":\"" << json_escape(line) << "\",\"assistant\":\"" << json_escape(reply.text)
+                             << "\",\"route\":\"" << route_name(reply.route) << "\"}\n" << std::flush;
+        if (!bundle.save(session_dir)) { std::cerr << "Erro ao persistir sessão.\n"; return 1; }
         if (debug) {
-            std::cout << "[DEBUG] Conceitos VSA: [";
+            std::cout << "[DEBUG] Rota: " << route_name(reply.route) << " | Conceitos VSA: [";
             for (size_t i = 0; i < trace.activated_concepts.size(); ++i) {
                 if (i > 0) std::cout << ", ";
                 std::cout << trace.activated_concepts[i];
@@ -309,9 +349,47 @@ int cmd_chat(int argc, char** argv) {
     return 0;
 }
 
+int cmd_ingest_code(int argc, char** argv) {
+    const auto repo = get_arg(argc, argv, "--repo");
+    const auto model = get_arg(argc, argv, "--model");
+    if (!fs::is_directory(repo) || model.empty()) { print_usage(); return 1; }
+    ModelBundle bundle;
+    if (fs::exists(model + "/codebook.bin") && !bundle.load(model, false)) return 1;
+    const auto count = TreeSitterCodeParser::ingest_directory(repo, bundle.code_graph, &bundle.sdm, has_flag(argc, argv, "--use-gpu"));
+    if (!bundle.save(model)) return 1;
+    std::cout << "[ingest-code] Funções: " << count << " | Arestas: " << bundle.code_graph.num_edges() << "\n";
+    return 0;
+}
+int cmd_code(int argc, char** argv) {
+    const auto repo = get_arg(argc, argv, "--workspace");
+    const auto model = get_arg(argc, argv, "--model");
+    const auto task = get_arg(argc, argv, "--task");
+    const auto lang = string_to_code_lang(get_arg(argc, argv, "--lang"));
+    if (!fs::is_directory(repo) || model.empty() || task.empty() || lang == CodeLanguage::UNKNOWN) { print_usage(); return 1; }
+    ModelBundle bundle;
+    if (!bundle.load(model, true)) return 1;
+    bundle.code_graph = CodeGraph{};
+    TreeSitterCodeParser::ingest_directory(repo, bundle.code_graph, &bundle.sdm, has_flag(argc, argv, "--use-gpu"));
+    const auto result = CodeSynthesizer{}.synthesize(task, lang, bundle.code_graph, bundle.codebook);
+    if (!result.syntax_valid) { std::cerr << result.error << "\n"; return 1; }
+    std::cout << result.code;
+    return 0;
+}
+int cmd_export_pairs(int argc, char** argv) {
+    ModelBundle bundle;
+    const auto model = get_arg(argc, argv, "--model");
+    const auto output = get_arg(argc, argv, "--out");
+    if (model.empty() || output.empty() || !bundle.load(model)) return 1;
+    std::ofstream out(output);
+    if (!out) return 1;
+    for (const auto& pair : bundle.realizer_pairs) out << pair << '\n';
+    std::cout << "Pares exportados: " << bundle.realizer_pairs.size() << "\n";
+    return out ? 0 : 1;
+}
+
 } // namespace
 
-int main(int argc, char** argv) {
+int run_cli(int argc, char** argv) {
     if (argc < 2) {
         print_usage();
         return 1;
@@ -321,8 +399,16 @@ int main(int argc, char** argv) {
     if (cmd == "train-dialogue") return cmd_train_dialogue(argc, argv);
     if (cmd == "consolidate")    return cmd_consolidate(argc, argv);
     if (cmd == "stats")          return cmd_stats(argc, argv);
-    if (cmd == "chat")           return cmd_chat(argc, argv);
+    if (cmd == "ingest-code") return cmd_ingest_code(argc, argv);
+    if (cmd == "code") return cmd_code(argc, argv);
+    if (cmd == "export-realizer-dataset") return cmd_export_pairs(argc, argv);
+    if (cmd == "chat" || cmd == "assistant")           return cmd_chat(argc, argv);
 
     print_usage();
     return 1;
+}
+
+int main(int argc, char** argv) {
+    try { return run_cli(argc, argv); }
+    catch (const std::exception& error) { std::cerr << "Erro: " << error.what() << "\n"; return 1; }
 }

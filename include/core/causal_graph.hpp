@@ -17,10 +17,31 @@ enum class RelationType : uint8_t {
     ACTION    = 4
 };
 
+enum class GramTense : uint8_t {
+    PRES = 0,
+    PAST = 1,
+    FUT  = 2,
+    INF  = 3,
+    SUBJ = 4
+};
+
+enum class GramGender : uint8_t {
+    MASC = 0,
+    FEM  = 1,
+    NEUT = 2
+};
+
+enum class GramNumber : uint8_t {
+    SING = 0,
+    PLUR = 1
+};
+
 struct GraphNode {
     uint32_t id = 0;
     std::string name;
     uint32_t frequency = 1;
+    GramGender gender = GramGender::MASC;
+    GramNumber number = GramNumber::SING;
 };
 
 struct GraphEdge {
@@ -31,6 +52,9 @@ struct GraphEdge {
     uint32_t frequency = 1;
     float confidence = 0.8f;
     bool user_taught = false;
+    bool negated = false;
+    GramTense tense = GramTense::PRES;
+    char modality[16]{}; // e.g. "pode", "nunca", "can"
 };
 
 struct CausalStep {
@@ -39,6 +63,13 @@ struct CausalStep {
     std::string dst;
     RelationType type = RelationType::CAUSAL;
     float confidence = 0.8f;
+    bool negated = false;
+    GramTense tense = GramTense::PRES;
+    std::string modality;
+    GramGender src_gender = GramGender::MASC;
+    GramNumber src_number = GramNumber::SING;
+    GramGender dst_gender = GramGender::MASC;
+    GramNumber dst_number = GramNumber::SING;
 };
 
 struct CausalPath {
@@ -48,7 +79,9 @@ struct CausalPath {
 
 class CausalGraph {
 public:
-    uint32_t get_or_add_node(const std::string& name);
+    uint32_t get_or_add_node(const std::string& name,
+                             GramGender gender = GramGender::MASC,
+                             GramNumber number = GramNumber::SING);
     uint32_t find_node(const std::string& name) const; // UINT32_MAX if not found
     uint32_t get_or_add_relation(const std::string& rel);
 
@@ -57,7 +90,14 @@ public:
                   const std::string& obj,
                   RelationType type = RelationType::CAUSAL,
                   float confidence = 0.8f,
-                  bool user_taught = false);
+                  bool user_taught = false,
+                  bool negated = false,
+                  GramTense tense = GramTense::PRES,
+                  const std::string& modality = "",
+                  GramGender subj_gender = GramGender::MASC,
+                  GramNumber subj_number = GramNumber::SING,
+                  GramGender obj_gender = GramGender::MASC,
+                  GramNumber obj_number = GramNumber::SING);
 
     /// Multi-hop beam search / spreading activation from seed concepts.
     std::vector<CausalPath> find_paths(const std::vector<std::string>& seed_concepts,

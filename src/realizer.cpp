@@ -1,9 +1,11 @@
 #include "core/realizer.hpp"
+#include "core/morphological_realizer.hpp"
 
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <limits>
+#include <sstream>
 
 namespace cognicore {
 
@@ -108,15 +110,27 @@ std::string ConstructionGrammarRealizer::fill_frame(const std::string& pattern,
     return out;
 }
 
-std::string ConstructionGrammarRealizer::realize_step(const CausalStep& step) const {
-    // Prefer exact step relation, or select a matching learned frame
-    std::string direct = step.src + " " + step.rel + " " + step.dst;
-    for (const auto& f : frames_) {
-        if (f.rel_type == step.type && f.pattern.find(step.rel) != std::string::npos) {
-            return fill_frame(f.pattern, step.src, step.dst);
-        }
+std::string ConstructionGrammarRealizer::realize_step(const CausalStep& step, const std::string& lang) const {
+    // Compile a matching learned SVO construction into typed predicate slots.
+    // A frame with the same relation category but a different verb is unsafe.
+    std::string construction = "[SUBJ:ENT] [PRED:VERB] [OBJ:ENT]";
+    uint32_t frequency = 0;
+    const std::string subj = "[SUBJ:ENT]", obj = "[OBJ:ENT]";
+    for (const auto& frame : frames_) {
+        if (frame.rel_type != step.type || !frame.pattern.starts_with(subj) || !frame.pattern.ends_with(obj)) continue;
+        auto predicate = frame.pattern.substr(subj.size(), frame.pattern.size() - subj.size() - obj.size());
+        const auto begin = predicate.find_first_not_of(' '), end = predicate.find_last_not_of(' ');
+        if (begin == std::string::npos) continue;
+        predicate = predicate.substr(begin, end - begin + 1);
+        if (TextParser::lemmatize_simple(predicate) != TextParser::lemmatize_simple(step.rel) || frame.frequency < frequency) continue;
+        construction = frame.pattern;
+        construction.replace(subj.size(), frame.pattern.size() - subj.size() - obj.size(), " [PRED:VERB] ");
+        frequency = frame.frequency;
     }
-    return direct;
+    auto subject = MorphologicalRealizer::definite_article(step.src_gender, step.src_number, lang) + " " + step.src;
+    const auto lower = TextParser::utf8_tolower(step.src);
+    for (const auto* article : {"o ", "a ", "os ", "as ", "the "}) if (lower.starts_with(article)) subject = step.src;
+    return capitalize_first(MorphologicalRealizer{}.realize_clause(step, subject, lang, construction));
 }
 
 std::string ConstructionGrammarRealizer::capitalize_first(std::string s) const {
@@ -130,86 +144,74 @@ std::string ConstructionGrammarRealizer::capitalize_first(std::string s) const {
 }
 
 std::string ConstructionGrammarRealizer::realize(const SemanticPlan& plan) const {
-    if (plan.intent == DialogIntent::GREET) {
-        return "Olá! Estou pronto para raciocinar e aprender novos conceitos com você.";
-    }
-    if (plan.intent == DialogIntent::AGREE) {
-        return "Sim, isso está coerente com as relações causais registradas na memória.";
-    }
-    if (plan.intent == DialogIntent::ASK_CLARIFY || plan.paths.empty()) {
-        if (plan.query_concepts.empty()) {
-            return "Poderia detalhar melhor os conceitos envolvidos para que eu possa inferir a relação?";
-        }
-        return "Ainda não tenho conexões suficientes sobre " + plan.query_concepts[0] +
-               ". Você pode me ensinar uma relação causal envolvendo esse conceito?";
-    }
+    // All candidates are structural realizations of exactly the same steps.
+    // Corpus statistics rank wording; they cannot select facts or change verbs.
+    const MorphologicalRealizer morphology;
+    const auto base = morphology.realize(plan);
+    if (plan.paths.empty() || plan.paths[0].steps.empty() ||
+        plan.intent == DialogIntent::GREET || plan.intent == DialogIntent::AGREE ||
+        plan.intent == DialogIntent::ASK_CLARIFY) return base;
 
-    const auto& best_path = plan.paths[0];
-    if (best_path.steps.empty()) {
-        return "Não encontrei um caminho causal completo para essa consulta.";
+    const auto& steps = plan.paths[0].steps;
+    std::vector<std::string> clauses;
+    bool causal_chain = steps.size() > 1;
+    for (size_t i = 0; i < steps.size(); ++i) {
+        clauses.push_back(realize_step(steps[i], plan.language));
+        if (steps[i].negated || !steps[i].modality.empty() || steps[i].type != RelationType::CAUSAL ||
+            (i && steps[i-1].dst != steps[i].src)) causal_chain = false;
     }
-
-    TextParser tokenizer_helper;
-    std::vector<std::string> candidates;
-
-    if (best_path.steps.size() == 1) {
-        const auto& st = best_path.steps[0];
-        std::string base = realize_step(st);
-        if (plan.intent == DialogIntent::HYPOTHESIZE) {
-            candidates.push_back("Se " + base + ", então há um efeito direto sobre " + st.dst + ".");
-            candidates.push_back("Hipoteticamente, " + base + ".");
-        } else if (plan.intent == DialogIntent::EXPLAIN_CAUSE) {
-            candidates.push_back("Isso ocorre porque " + base + ".");
-            candidates.push_back(capitalize_first(base) + ".");
-        } else {
-            candidates.push_back(capitalize_first(base) + ".");
-        }
-
-        // Also try compatible frames of same RelationType
-        for (const auto& f : frames_) {
-            if (f.rel_type == st.type) {
-                candidates.push_back(capitalize_first(fill_frame(f.pattern, st.src, st.dst)) + ".");
-                if (candidates.size() >= 6) break;
+    std::vector<std::string> candidates{base};
+    std::string separate;
+    for (const auto& clause : clauses) {
+        if (!separate.empty()) separate += " ";
+        separate += clause + ".";
+    }
+    candidates.push_back(std::move(separate));
+    const bool english = plan.language == "en";
+    if (clauses.size() == 1 && plan.intent == DialogIntent::EXPLAIN_CAUSE) {
+        auto clause = clauses[0];
+        if (!clause.empty() && static_cast<unsigned char>(clause[0]) < 128)
+            clause[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(clause[0])));
+        candidates.push_back((english ? "This happens because " : "Isso ocorre porque ") + clause + ".");
+    }
+    if (causal_chain) {
+        const std::vector<std::string> connectors = english
+            ? std::vector<std::string>{"; therefore, ", "; as a result, "}
+            : std::vector<std::string>{"; portanto, ", "; por isso, ", "; assim, "};
+        for (const auto& connector : connectors) {
+            std::string composed = clauses[0];
+            for (size_t i = 1; i < clauses.size(); ++i) {
+                auto clause = clauses[i];
+                if (!clause.empty() && static_cast<unsigned char>(clause[0]) < 128)
+                    clause[0] = static_cast<char>(std::tolower(static_cast<unsigned char>(clause[0])));
+                composed += connector + clause;
             }
-        }
-    } else {
-        // Multi-hop compositional synthesis (combines multiple steps into a novel sentence)
-        const auto& s0 = best_path.steps[0];
-        const auto& s_last = best_path.steps.back();
-        std::string clause0 = realize_step(s0);
-
-        std::string chain_mid;
-        for (size_t i = 1; i < best_path.steps.size(); ++i) {
-            const auto& si = best_path.steps[i];
-            if (i == 1) {
-                chain_mid += si.rel + " " + si.dst;
-            } else {
-                chain_mid += " e " + si.src + " " + si.rel + " " + si.dst;
-            }
-        }
-
-        candidates.push_back(
-            capitalize_first(clause0) + ", o que por sua vez " + chain_mid +
-            "; portanto, " + s0.src + " leva a " + s_last.dst + ".");
-        candidates.push_back(
-            "Como " + clause0 + ", isso faz com que " + realize_step(best_path.steps[1]) +
-            ", conectando " + s0.src + " a " + s_last.dst + ".");
-        candidates.push_back(
-            "Pela cadeia causal, " + clause0 + " e " + realize_step(best_path.steps[1]) + ".");
-    }
-
-    // Score candidates with N-gram / CTW fluency scorer
-    std::string best_sent = candidates[0];
-    double best_score = -std::numeric_limits<double>::infinity();
-    for (const auto& cand : candidates) {
-        auto toks = tokenizer_helper.tokenize(cand);
-        double sc = score_fluency(toks);
-        if (sc > best_score) {
-            best_score = sc;
-            best_sent = cand;
+            candidates.push_back(composed + ".");
         }
     }
-    return best_sent;
+    TextParser tokenizer;
+    std::string best = candidates.front();
+    double score = -std::numeric_limits<double>::infinity();
+    for (const auto& candidate : candidates) {
+        const auto current = score_fluency(tokenizer.tokenize(candidate));
+        if (current > score) { score = current; best = candidate; }
+    }
+    return best;
+}
+
+std::string serialize_semantic_plan(const SemanticPlan& plan) {
+    std::ostringstream out;
+    out << "<PLAN> <LANG: " << plan.language << "> <INTENT: " << intent_to_string(plan.intent) << ">";
+    if (!plan.paths.empty()) for (const auto& step : plan.paths[0].steps) {
+        out << " <SUBJ: " << step.src << "> <REL: " << step.rel << "> <OBJ: " << step.dst << ">"
+            << " <TENSE: " << unsigned(step.tense) << "> <SUBJ_GENDER: " << unsigned(step.src_gender)
+            << "> <SUBJ_NUMBER: " << unsigned(step.src_number) << "> <OBJ_GENDER: " << unsigned(step.dst_gender)
+            << "> <OBJ_NUMBER: " << unsigned(step.dst_number) << "> <TYPE: " << unsigned(step.type) << ">";
+        if (step.negated) out << " <NEG: true>";
+        if (!step.modality.empty()) out << " <MODAL: " << step.modality << ">";
+    }
+    out << " </PLAN>";
+    return out.str();
 }
 
 size_t ConstructionGrammarRealizer::memory_bytes() const noexcept {

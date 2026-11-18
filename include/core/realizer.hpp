@@ -18,6 +18,9 @@ struct SemanticPlan {
     std::string language = "pt";
 };
 
+/// Symbolic, model-independent representation for auditing and corpus export.
+std::string serialize_semantic_plan(const SemanticPlan& plan);
+
 class ISurfaceRealizer {
 public:
     virtual ~ISurfaceRealizer() = default;
@@ -32,7 +35,7 @@ public:
     void observe_sentence_tokens(const std::vector<std::string>& tokens);
     void consolidate_frames();
 
-    /// Scores fluency of a token sequence using smoothed bigram/trigram (CTW-style) log-probability.
+    /// Scores fluency of a token sequence using smoothed interpolated unigram/bigram/trigram log-probability.
     double score_fluency(const std::vector<std::string>& tokens) const;
 
     std::string realize(const SemanticPlan& plan) const override;
@@ -57,7 +60,7 @@ private:
     std::string fill_frame(const std::string& pattern,
                            const std::string& subj,
                            const std::string& obj) const;
-    std::string realize_step(const CausalStep& step) const;
+    std::string realize_step(const CausalStep& step, const std::string& lang) const;
     std::string capitalize_first(std::string s) const;
 
     std::vector<ConstructionFrame> frames_;
