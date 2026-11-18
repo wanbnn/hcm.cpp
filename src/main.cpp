@@ -6,6 +6,8 @@
 #include "core/symbolic_math.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <map>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -28,6 +30,7 @@ void print_usage() {
               << "  cognicore consolidate --model <dir_modelo>\n"
               << "  cognicore stats --model <dir_modelo>\n"
               << "  cognicore ingest-code --repo <dir> --model <dir_modelo> [--use-gpu]\n"
+              << "  cognicore mine-constructions --input <dir_ou_txt> --model <dir_modelo> --out <saida.jsonl> [--limit-files N]\n"
               << "  cognicore code --model <dir_modelo> --workspace <dir> --lang cpp|py|js --task <descrição>\n"
               << "  cognicore train-realizer --model <dir_modelo> [--use-gpu]\n"
               << "  cognicore evaluate-fluency --model <dir_modelo> --input <texto> [--out <relatorio.json>]\n"
@@ -750,6 +753,118 @@ int cmd_chat(int argc, char** argv) {
     return 0;
 }
 
+int cmd_mine_constructions(int argc, char** argv) {
+    const auto input = get_arg(argc, argv, "--input");
+    const auto model_dir = get_arg(argc, argv, "--model");
+    const auto output = get_arg(argc, argv, "--out");
+    if (input.empty() || model_dir.empty() || output.empty()) { print_usage(); return 1; }
+    ModelBundle bundle;
+    if (!bundle.load(model_dir, false)) { std::cerr << "Erro ao carregar modelo.\n"; return 1; }
+    load_rules_if_present(bundle.parser, model_dir);
+    const size_t limit = std::stoul(get_arg(argc, argv, "--limit-files", "0"));
+
+    auto relation_name = [](RelationType type) {
+        switch (type) {
+            case RelationType::TAXONOMIC: return "TAXONOMIC";
+            case RelationType::PROPERTY: return "PROPERTY";
+            case RelationType::HAS_PART: return "HAS_PART";
+            case RelationType::PART_OF: return "PART_OF";
+            case RelationType::FUNCTION: return "FUNCTION";
+            case RelationType::ENABLES: return "ENABLES";
+            case RelationType::SEQUENCE: return "SEQUENCE";
+            case RelationType::PRECEDES: return "PRECEDES";
+            case RelationType::INHIBITS: return "INHIBITS";
+            case RelationType::ACTION: return "ACTION";
+            default: return "CAUSAL";
+        }
+    };
+
+    std::map<std::string, std::pair<RelationType, size_t>> patterns;
+    std::map<std::string, std::map<std::string, size_t>> pattern_objects;
+    std::vector<fs::path> files;
+    if (fs::is_directory(input))
+        for (const auto& entry : fs::recursive_directory_iterator(input))
+            if (entry.is_regular_file() && entry.path().extension() == ".txt") files.push_back(entry.path());
+    else files.push_back(input);
+    std::sort(files.begin(), files.end());
+    if (limit && files.size() > limit) files.resize(limit);
+
+    for (const auto& file : files) {
+        std::ifstream in(file);
+        std::ostringstream buffer;
+        buffer << in.rdbuf();
+        const auto doc = bundle.parser.parse_text(buffer.str());
+        for (const auto& triple : doc.triples) {
+            if (triple.type != RelationType::HAS_PART && triple.type != RelationType::PART_OF &&
+                triple.type != RelationType::FUNCTION && triple.type != RelationType::ENABLES &&
+                triple.type != RelationType::SEQUENCE && triple.type != RelationType::TAXONOMIC)
+                continue;
+            if (triple.relation.size() < 3 || bundle.parser.is_stopword(triple.relation)) continue;
+            std::string verb = triple.relation;
+            std::string pattern;
+            if (triple.type == RelationType::HAS_PART) pattern = "{SUBJ} contém {OBJS}.";
+            else if (triple.type == RelationType::PART_OF) pattern = "{SUBJ} faz parte de {OBJS}.";
+            else if (triple.type == RelationType::TAXONOMIC) pattern = "{SUBJ} é um {OBJS}.";
+            else {
+                verb = MorphologicalRealizer::conjugate_verb(triple.relation, GramTense::PRES,
+                                                             GramNumber::SING, "pt");
+                if (verb.empty()) verb = triple.relation;
+                pattern = "{SUBJ} " + verb + " {OBJS}.";
+            }
+            ++patterns[pattern].second;
+            patterns[pattern].first = triple.type;
+            ++pattern_objects[pattern][TextParser::utf8_tolower(triple.object)];
+        }
+    }
+
+    const auto& collocations = bundle.lexicon.collocation_counts();
+    uint64_t total = 0;
+    std::map<std::string, uint64_t> verb_totals, object_totals;
+    for (const auto& [key, count] : collocations) {
+        const auto tab = key.find('\t');
+        if (tab == std::string::npos) continue;
+        total += count;
+        verb_totals[key.substr(0, tab)] += count;
+        object_totals[key.substr(tab + 1)] += count;
+    }
+
+    std::vector<std::pair<std::string, std::pair<RelationType, size_t>>> ranked(patterns.begin(), patterns.end());
+    std::sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) {
+        return a.second.second > b.second.second;
+    });
+    std::ofstream out(output);
+    if (!out) { std::cerr << "Não foi possível abrir " << output << "\n"; return 1; }
+    size_t id = 0;
+    for (const auto& [pattern, info] : ranked) {
+        const auto freq = info.second;
+        if (freq < 2) continue;
+        const double cost = 1.0 / (1.0 + std::log1p(static_cast<double>(freq)));
+        double pmi = 0.0;
+        const auto& objects = pattern_objects[pattern];
+        if (!objects.empty()) {
+            const auto best = std::max_element(objects.begin(), objects.end(),
+                [](const auto& a, const auto& b) { return a.second < b.second; });
+            std::string relation = pattern;
+            (void)relation;
+            const auto object = best->first;
+            const auto key = std::string(info.first == RelationType::HAS_PART ? "conter" :
+                info.first == RelationType::PART_OF ? "fazer" : "ser") + "\t" + object;
+            const auto it = collocations.find(key);
+            const auto v = verb_totals[key.substr(0, key.find('\t'))];
+            const auto o = object_totals[object];
+            if (it != collocations.end() && v && o && total)
+                pmi = std::log((static_cast<double>(it->second) * total) / (static_cast<double>(v) * o) + 1.0);
+        }
+        out << "{\"id\":\"mined_" << id++ << "\",\"pattern\":\"" << json_escape(pattern)
+            << "\",\"relation\":\"" << relation_name(info.first)
+            << "\",\"frequency\":" << freq << ",\"cost\":" << cost
+            << ",\"pmi\":" << pmi << "}\n";
+    }
+    std::cout << "[mine-constructions] arquivos=" << files.size() << " padrões=" << id
+              << " collocations=" << collocations.size() << "\n";
+    return 0;
+}
+
 int cmd_ingest_code(int argc, char** argv) {
     const auto repo = get_arg(argc, argv, "--repo");
     const auto model = get_arg(argc, argv, "--model");
@@ -807,6 +922,7 @@ int run_cli(int argc, char** argv) {
     if (cmd == "consolidate")    return cmd_consolidate(argc, argv);
     if (cmd == "stats")          return cmd_stats(argc, argv);
     if (cmd == "ingest-code") return cmd_ingest_code(argc, argv);
+    if (cmd == "mine-constructions") return cmd_mine_constructions(argc, argv);
     if (cmd == "code") return cmd_code(argc, argv);
     if (cmd == "train-realizer") return cmd_train_realizer(argc, argv);
     if (cmd == "evaluate-fluency") return cmd_evaluate_fluency(argc, argv);

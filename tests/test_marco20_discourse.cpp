@@ -106,6 +106,18 @@ int main() {
         std::cout << "[PASS] DiscourseGenerator: coordenação + anáfora\n";
     }
 
+    // Compound coordination keeps the preposition on each conjunct.
+    {
+        DocumentParagraph paragraph;
+        add(paragraph, step("motor de combustão interna", "conter", "as bielas e os êmbolos",
+                            RelationType::HAS_PART, GramGender::MASC, GramNumber::SING,
+                            GramGender::FEM, GramNumber::PLUR));
+        LanguageRules rules;
+        const auto text = DiscourseGenerator{}.realize(paragraph, rules);
+        assert(text.find("pelas bielas e pelos êmbolos") != std::string::npos);
+        std::cout << "[PASS] coordenação composta: preposição por conjunto\n";
+    }
+
     // Search penalizes repetition.
     {
         GenerationSearch search;

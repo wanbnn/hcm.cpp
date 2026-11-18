@@ -14,6 +14,25 @@ std::string read_file(const std::string& path) {
     return out.str();
 }
 
+std::vector<std::string> array_values(const std::string& json, const std::string& key) {
+    std::vector<std::string> out;
+    const auto at = json.find("\"" + key + "\"");
+    if (at == std::string::npos) return out;
+    const auto open = json.find('[', at);
+    const auto close = json.find(']', open);
+    if (open == std::string::npos || close == std::string::npos) return out;
+    size_t i = open + 1;
+    while (i < close) {
+        const auto q1 = json.find('"', i);
+        if (q1 == std::string::npos || q1 >= close) break;
+        const auto q2 = json.find('"', q1 + 1);
+        if (q2 == std::string::npos || q2 >= close) break;
+        out.push_back(json.substr(q1 + 1, q2 - q1 - 1));
+        i = q2 + 1;
+    }
+    return out;
+}
+
 double number_value(const std::string& json, const std::string& key, double fallback) {
     const auto at = json.find("\"" + key + "\"");
     if (at == std::string::npos) return fallback;
@@ -59,8 +78,21 @@ bool DiscourseConfig::load(const std::string& model_dir) {
         pronoun_bonus = number_value(json, "pronoun_bonus", pronoun_bonus);
         length_penalty = number_value(json, "length_penalty", length_penalty);
         connector_penalty = number_value(json, "connector_penalty", connector_penalty);
+        beam_width = int_value(json, "beam_width", beam_width);
         const auto zero = json.find("\"allow_zero_anaphora\"");
         if (zero != std::string::npos) allow_zero_anaphora = json.find("true", zero) != std::string::npos;
+    }
+    contractions.clear();
+    const auto morphology = read_file(model_dir + "/morphology_pt.json");
+    for (const auto& item : array_values(morphology, "contractions")) {
+        const auto eq = item.find('=');
+        if (eq != std::string::npos) contractions[item.substr(0, eq)] = item.substr(eq + 1);
+    }
+    entity_types.clear();
+    const auto types = read_file(model_dir + "/entity_types.json");
+    for (const auto& item : array_values(types, "types")) {
+        const auto eq = item.find('=');
+        if (eq != std::string::npos) entity_types[item.substr(0, eq)] = item.substr(eq + 1);
     }
     constructions.clear();
     std::ifstream bank(model_dir + "/constructions_pt.jsonl");
@@ -76,6 +108,21 @@ bool DiscourseConfig::load(const std::string& model_dir) {
             constructions.push_back(std::move(construction));
     }
     return true;
+}
+
+std::string DiscourseConfig::entity_type(const std::string& canonical) const {
+    const auto it = entity_types.find(canonical);
+    return it == entity_types.end() ? std::string{} : it->second;
+}
+
+std::string DiscourseConfig::contraction(const std::string& preposition, GramGender gender,
+                                         GramNumber number) const {
+    const char* article = gender == GramGender::FEM
+        ? (number == GramNumber::PLUR ? "as" : "a")
+        : (number == GramNumber::PLUR ? "os" : "o");
+    const auto key = preposition + "|" + article;
+    const auto it = contractions.find(key);
+    return it == contractions.end() ? std::string{} : it->second;
 }
 
 std::vector<const Construction*> DiscourseConfig::constructions_for(RelationType relation) const {

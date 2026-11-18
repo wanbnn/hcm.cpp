@@ -1,0 +1,3 @@
+{
+  "types": ["motor=MECHANISM","motor de combustão interna=MECHANISM","combustão=PROCESS","calor=PHENOMENON","gelo=MATERIAL","atrito=PHENOMENON","ciclo otto=CYCLE","admissão=STAGE","compressão=STAGE"]
+}

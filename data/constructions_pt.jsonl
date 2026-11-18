@@ -1,3 +1,10 @@
 {"id":"part_of_formed","pattern":"{SUBJ} é formado {OBJS}.","relation":"HAS_PART","cost":0.10}
 {"id":"part_of_composed","pattern":"{SUBJ} é composto {OBJS}.","relation":"HAS_PART","cost":0.15}
 {"id":"part_of_belongs","pattern":"{SUBJ} faz parte {OBJS}.","relation":"PART_OF","cost":0.10}
+{"id":"mined_0","pattern":"{SUBJ} contém {OBJS}.","relation":"HAS_PART","frequency":3399,"cost":0.109511,"pmi":0}
+{"id":"mined_1","pattern":"{SUBJ} é um {OBJS}.","relation":"TAXONOMIC","frequency":2207,"cost":0.114945,"pmi":0.126368}
+{"id":"mined_2","pattern":"{SUBJ} segue {OBJS}.","relation":"SEQUENCE","frequency":20,"cost":0.247248,"pmi":0}
+{"id":"mined_3","pattern":"{SUBJ} permite {OBJS}.","relation":"ENABLES","frequency":18,"cost":0.253521,"pmi":0}
+{"id":"mined_4","pattern":"{SUBJ} faz parte de {OBJS}.","relation":"PART_OF","frequency":5,"cost":0.358197,"pmi":0}
+{"id":"mined_5","pattern":"{SUBJ} funciona como {OBJS}.","relation":"FUNCTION","frequency":2,"cost":0.476505,"pmi":0}
+{"id":"mined_6","pattern":"{SUBJ} serve para {OBJS}.","relation":"FUNCTION","frequency":2,"cost":0.476505,"pmi":0}

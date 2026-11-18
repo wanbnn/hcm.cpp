@@ -4,6 +4,7 @@
 #include "core/document_planner.hpp"
 #include "core/language_rules.hpp"
 #include "core/discourse_config.hpp"
+#include "core/tsetlin.hpp"
 
 #include <cstdint>
 #include <string>
@@ -24,6 +25,7 @@ struct Entity {
     std::string canonical;
     GramGender gender = GramGender::MASC;
     GramNumber number = GramNumber::SING;
+    std::string type;
     int salience = 0;
 };
 
@@ -88,7 +90,8 @@ struct TextPlan {
 
 class EntityRegistry {
 public:
-    EntityId get_or_add(const std::string& canonical, GramGender gender, GramNumber number);
+    EntityId get_or_add(const std::string& canonical, GramGender gender, GramNumber number,
+                        const std::string& type = {});
     EntityId find(const std::string& canonical) const;
     const Entity& entity(EntityId id) const;
     const std::vector<Entity>& entities() const { return entities_; }
@@ -114,6 +117,15 @@ class TextPlanner {
 public:
     TextPlan plan(const DocumentParagraph& paragraph, const LanguageRules& rules,
                   const DiscourseConfig* config = nullptr) const;
+};
+
+class CohesionRanker {
+public:
+    CohesionRanker();
+    double score(const std::string& text) const;
+private:
+    static uint64_t features(const std::string& text);
+    SparseTsetlinModel model_;
 };
 
 class GenerationSearch {

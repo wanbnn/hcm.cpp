@@ -51,7 +51,11 @@ std::string pronoun(const Entity& entity, const std::string& lang) {
 }
 
 std::string prep_article(const std::string& preposition, GramGender gender, GramNumber number,
-                         const std::string& lang) {
+                         const std::string& lang, const DiscourseConfig* config) {
+    if (config) {
+        const auto contracted = config->contraction(preposition, gender, number);
+        if (!contracted.empty()) return contracted;
+    }
     if (lang != "pt") return preposition + " " + MorphologicalRealizer::definite_article(gender, number, lang);
     const bool fem = gender == GramGender::FEM;
     const bool plur = number == GramNumber::PLUR;
@@ -60,8 +64,36 @@ std::string prep_article(const std::string& preposition, GramGender gender, Gram
     return preposition;
 }
 
-std::string prep_np(const std::string& preposition, const Entity& entity, const std::string& lang) {
-    return prep_article(preposition, entity.gender, entity.number, lang) + " " + entity.canonical;
+std::string prep_np(const std::string& preposition, const Entity& entity, const std::string& lang,
+                    const DiscourseConfig* config) {
+    // Coordinate compound objects per conjunct: "as bielas e os êmbolos"
+    // becomes "pelas bielas e pelos êmbolos", not "pelas bielas e os êmbolos".
+    const auto& name = entity.canonical;
+    const auto split = name.find(" e ");
+    if (split != std::string::npos) {
+        const auto left = name.substr(0, split);
+        const auto right = name.substr(split + 3);
+        auto starts_with_article = [](const std::string& value) {
+            return value.starts_with("o ") || value.starts_with("a ") ||
+                   value.starts_with("os ") || value.starts_with("as ") ||
+                   value.starts_with("um ") || value.starts_with("uma ");
+        };
+        if (starts_with_article(left) && starts_with_article(right)) {
+            TextParser parser;
+            auto conjunct = [&](const std::string& value) {
+                const auto space = value.find(' ');
+                const auto noun = space == std::string::npos ? value : value.substr(space + 1);
+                GramGender gender = parser.infer_gender(noun);
+                GramNumber number = parser.infer_number(noun);
+                if (value.starts_with("as ") || value.starts_with("a ") || value.starts_with("uma ")) gender = GramGender::FEM;
+                if (value.starts_with("os ") || value.starts_with("o ") || value.starts_with("um ")) gender = GramGender::MASC;
+                if (value.starts_with("as ") || value.starts_with("os ")) number = GramNumber::PLUR;
+                return prep_article(preposition, gender, number, lang, config) + " " + noun;
+            };
+            return conjunct(left) + " e " + conjunct(right);
+        }
+    }
+    return prep_article(preposition, entity.gender, entity.number, lang, config) + " " + name;
 }
 
 std::string join_list(const std::vector<std::string>& values) {
@@ -134,7 +166,7 @@ void DiscourseState::observe(const std::vector<Proposition>& propositions,
 }
 
 EntityId EntityRegistry::get_or_add(const std::string& canonical, GramGender gender,
-                                    GramNumber number) {
+                                    GramNumber number, const std::string& type) {
     const auto key = lower(canonical);
     const auto it = index_.find(key);
     if (it != index_.end()) return it->second;
@@ -143,6 +175,7 @@ EntityId EntityRegistry::get_or_add(const std::string& canonical, GramGender gen
     entity.canonical = canonical;
     entity.gender = gender;
     entity.number = number;
+    entity.type = type;
     entities_.push_back(entity);
     index_[key] = entity.id;
     return entity.id;
@@ -223,8 +256,12 @@ TextPlan TextPlanner::plan(const DocumentParagraph& paragraph, const LanguageRul
                 if (!seen_propositions.insert(key).second) continue;
                 Proposition proposition;
                 proposition.step = step;
-                proposition.subject = registry.get_or_add(step.src, step.src_gender, step.src_number);
-                proposition.object = registry.get_or_add(step.dst, step.dst_gender, step.dst_number);
+                proposition.subject = registry.get_or_add(
+                    step.src, step.src_gender, step.src_number,
+                    config ? config->entity_type(step.src) : std::string{});
+                proposition.object = registry.get_or_add(
+                    step.dst, step.dst_gender, step.dst_number,
+                    config ? config->entity_type(step.dst) : std::string{});
                 all.push_back(std::move(proposition));
             }
     if (all.empty()) return text_plan;
@@ -279,6 +316,70 @@ TextPlan TextPlanner::plan(const DocumentParagraph& paragraph, const LanguageRul
     return text_plan;
 }
 
+uint64_t CohesionRanker::features(const std::string& text) {
+    const auto tokens = TextParser{}.tokenize(text);
+    std::unordered_set<std::string> seen;
+    int repeats = 0;
+    int content = 0;
+    for (const auto& token : tokens) {
+        if (token.size() < 3) continue;
+        ++content;
+        if (!seen.insert(token).second) ++repeats;
+    }
+    uint64_t mask = 0;
+    const auto lower_text = lower(text);
+    if (lower_text.find("ele ") != std::string::npos || lower_text.find("ela ") != std::string::npos)
+        mask |= 1ULL << 0;
+    if (repeats > 1) mask |= 1ULL << 1;
+    if (content > 40) mask |= 1ULL << 2;
+    if (lower_text.find("ele ") != std::string::npos && lower_text.find("ele ", lower_text.find("ele ") + 1) != std::string::npos)
+        mask |= 1ULL << 3;
+    if (lower_text.find("além disso") != lower_text.rfind("além disso")) mask |= 1ULL << 4;
+    if (lower_text.find(" e ") != std::string::npos && lower_text.find(',') != std::string::npos)
+        mask |= 1ULL << 5;
+    if (lower_text.find("primeiro") != std::string::npos || lower_text.find("em seguida") != std::string::npos)
+        mask |= 1ULL << 6;
+    if (lower_text.find("formado") != std::string::npos || lower_text.find("contém") != std::string::npos)
+        mask |= 1ULL << 7;
+    return mask;
+}
+
+CohesionRanker::CohesionRanker() {
+    TsetlinConfig config;
+    config.num_features = 8;
+    config.num_classes = 2;
+    config.clauses_per_class = 16;
+    config.n_states = 20;
+    config.margin_T = 10;
+    config.seed = 0x51A7C0DEULL;
+    TsetlinMachine machine(config);
+    std::vector<std::vector<uint64_t>> x;
+    std::vector<size_t> y;
+    for (uint64_t mask = 0; mask < 256; ++mask) {
+        const bool pronoun = mask & 1;
+        const bool repeated = mask & 2;
+        const bool long_text = mask & 4;
+        const bool ambiguous = mask & 8;
+        const bool connector_repeat = mask & 16;
+        const bool coordination = mask & 32;
+        const bool sequence = mask & 64;
+        const bool part_of = mask & 128;
+        const bool good = !repeated && !ambiguous && !connector_repeat && !long_text &&
+                          (pronoun || coordination || sequence || part_of);
+        x.push_back({mask});
+        y.push_back(good ? 1 : 0);
+    }
+    machine.fit(x, y, 40, false);
+    model_ = machine.export_sparse();
+}
+
+double CohesionRanker::score(const std::string& text) const {
+    const auto mask = features(text);
+    const auto scores = model_.score_classes(&mask);
+    if (scores.size() < 2) return 0.0;
+    return (scores[1] - scores[0]) / 100.0;
+}
+
 double GenerationSearch::score(const std::string& text, const DiscourseConfig* config) const {
     if (text.empty()) return 1e9;
     const auto tokens = TextParser{}.tokenize(text);
@@ -297,6 +398,8 @@ double GenerationSearch::score(const std::string& text, const DiscourseConfig* c
     cost += content * length_penalty;
     if (text.find("Ele ") != std::string::npos || text.find("Ela ") != std::string::npos) cost -= pronoun_bonus;
     if (text.find("Além disso") != std::string::npos) cost += connector_penalty;
+    static const CohesionRanker ranker;
+    cost -= ranker.score(text) * 0.1;
     return cost;
 }
 
@@ -326,20 +429,26 @@ std::string realize_sentence(const SentencePlan& sentence, const std::vector<Ent
     if (sentence.kind == SentenceKind::PART_OF) {
         if (sentence.coordinations.empty()) return {};
         const auto& coordination = sentence.coordinations.front();
-        std::vector<std::string> objects;
-        for (auto id : coordination.conjuncts)
-            objects.push_back(prep_np(coordination.preposition, entity_by_id(entities, id), lang));
-        auto subject = subject_surface(0);
-        if (subject.empty()) subject = article_np(entity_by_id(entities, coordination.subject), lang);
-        std::string text;
         const auto constructions = config ? config->constructions_for(coordination.relation)
                                           : std::vector<const Construction*>{};
+        std::string text;
         if (!constructions.empty())
             text = constructions[static_cast<size_t>(variant < 0 ? 0 : variant) % constructions.size()]->pattern;
         else
             text = lang_choice(rules.part_of_templates, lang,
                                variant < 0 ? 0 : static_cast<size_t>(variant),
                                "{SUBJ} é formado {OBJS}.");
+        std::vector<std::string> objects;
+        const bool direct_object = text.find("contém") != std::string::npos ||
+                                   text.find("inclui") != std::string::npos ||
+                                   text.find("possui") != std::string::npos;
+        for (auto id : coordination.conjuncts) {
+            const auto& entity = entity_by_id(entities, id);
+            objects.push_back(direct_object ? article_np(entity, lang)
+                                            : prep_np(coordination.preposition, entity, lang, config));
+        }
+        auto subject = subject_surface(0);
+        if (subject.empty()) subject = article_np(entity_by_id(entities, coordination.subject), lang);
         const auto subj_at = text.find("{SUBJ}");
         if (subj_at != std::string::npos) text.replace(subj_at, 6, subject);
         const auto objs_at = text.find("{OBJS}");
@@ -391,22 +500,36 @@ std::string DiscourseGenerator::realize(const DocumentParagraph& paragraph,
     const auto text_plan = planner.plan(paragraph, rules, config);
     if (text_plan.paragraphs.empty()) return {};
     GenerationSearch search;
-    std::vector<GenerationSearch::Candidate> candidates;
-    for (int variant = 0; variant < 3; ++variant) {
-        std::string text;
-        for (const auto& sentence : text_plan.paragraphs.front().sentences) {
-            const auto realized = realize_sentence(sentence, text_plan.entities, rules, variant, config);
+    const size_t beam_width = std::max<size_t>(1, config ? config->beam_width : 4);
+    std::vector<GenerationSearch::Candidate> beam{{"", 0.0}};
+    for (const auto& sentence : text_plan.paragraphs.front().sentences) {
+        std::vector<std::string> options;
+        for (int variant = 0; variant < 3; ++variant) {
+            auto realized = realize_sentence(sentence, text_plan.entities, rules, variant, config);
             if (realized.empty()) continue;
-            if (!text.empty()) text += ' ';
-            text += capitalize(realized);
-            if (text.back() != '.' && text.back() != '!' && text.back() != '?') text += '.';
+            realized = capitalize(realized);
+            if (realized.find(realized) != std::string::npos &&
+                realized.back() != '.' && realized.back() != '!' && realized.back() != '?')
+                realized += '.';
+            if (std::find(options.begin(), options.end(), realized) == options.end())
+                options.push_back(std::move(realized));
         }
-        if (text.empty()) continue;
-        const bool duplicate = std::any_of(candidates.begin(), candidates.end(),
-            [&](const GenerationSearch::Candidate& candidate) { return candidate.text == text; });
-        if (!duplicate) candidates.push_back({text, search.score(text, config)});
+        if (options.empty()) continue;
+        std::vector<GenerationSearch::Candidate> next;
+        for (const auto& candidate : beam) {
+            for (const auto& option : options) {
+                std::string text = candidate.text;
+                if (!text.empty()) text += ' ';
+                text += option;
+                next.push_back({text, search.score(text, config)});
+            }
+        }
+        std::sort(next.begin(), next.end(),
+                  [](const auto& a, const auto& b) { return a.cost < b.cost; });
+        if (next.size() > beam_width) next.resize(beam_width);
+        beam = std::move(next);
     }
-    return search.select(std::move(candidates));
+    return beam.empty() ? std::string{} : beam.front().text;
 }
 
 } // namespace cognicore

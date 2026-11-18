@@ -38,6 +38,7 @@ fixadas. Asserções ficam ativas nos testes mesmo em Release.
 ./build_rocm/cognicore ingest-books --input livros/ --model modelo --use-gpu
 ./build_rocm/cognicore ingest-books --input livros/ --model modelo --fact-n-style-only --use-gpu
 ./build_rocm/cognicore ingest-books --input fatos.txt --model modelo --facts-only
+./build/cognicore mine-constructions --input livros/ --model modelo --out constructions_pt.jsonl
 ./build_rocm/cognicore ingest-books --input analise.conllu --model modelo --parser conllu
 ./build_rocm/cognicore train-dialogue --input conversas.jsonl --model modelo --epochs 20 --use-gpu
 ./build_rocm/cognicore consolidate --model modelo

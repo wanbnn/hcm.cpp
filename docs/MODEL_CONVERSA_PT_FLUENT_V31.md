@@ -211,10 +211,26 @@ ContentPlan
 - `Aggregator` transforma fatos de parte/todo em uma `CoordinationPlan`
   plural, com preposição e concordância resolvidas.
 - `constructions_pt.jsonl` contém as construções de superfície e custos
-  (`é formado`, `é composto`, `faz parte`).
-- `discourse_pt.json` contém distância máxima de pronome e pesos da busca.
-- `GenerationSearch` não escolhe a primeira realização: gera variantes e
-  seleciona pela função de custo.
+  (`é formado`, `é composto`, `faz parte`, `contém`). O banco pode ser
+  minerado do corpus:
+  `./build/cognicore mine-constructions --input style/ --model <modelo> --out constructions_pt.jsonl`.
+  O minerador usa o `TextParser` e as colocações do `Lexicon`; cada entrada
+  leva `frequency`, `cost` e `pmi`.
+- `discourse_pt.json` contém distância máxima de pronome, `beam_width` e pesos
+  de repetição/pronome/comprimento/conector.
+- `morphology_pt.json` contém contrações (`por|o=pelo`), ordinais e regras de
+  agreement; o `DiscourseConfig` carrega e o realizer usa.
+- `entity_types.json` contém tipos de entidade (`motor=MECHANISM`,
+  `combustão=PROCESS`); o `EntityRegistry` guarda o tipo no `Entity`.
+- `CohesionRanker` é um Tsetlin pequeno treinado com features de coesão
+  (pronome, repetição, ambiguidade, comprimento, conector, coordenação,
+  sequência, parte/todo). Ele ajusta o custo da busca. O treino atual é
+  sintético (256 vetores de features); a mineração de rótulos humanos/corpus
+  é o próximo passo.
+- `GenerationSearch` não escolhe a primeira realização: mantém um beam de
+  `beam_width` candidatos, gera variantes por sentença, pontua e poda por
+  custo. Exemplo de custo: repetição, pronome, comprimento, conector,
+  construção e voto do rankeador Tsetlin.
 
 Exemplo:
 
@@ -225,8 +241,10 @@ O motor de combustão interna transforma a queima da mistura. Ele produz o traba
 
 Ainda é composição simbólica, não geração neural palavra por palavra. O
 ganho é estrutural: coordenação, referência e discurso são decididos antes da
-superfície. Limitações restantes: agreement de coordenações compostas
-(`pelas bielas e pelos êmbolos`) e construções menos frequentes.
+superfície. A coordenação composta agora distribui a preposição por conjunto
+(`pelas bielas e pelos êmbolos`). Limitações restantes: coesão lexical
+completa/RST e construções muito raras; o rankeador Tsetlin ainda usa treino
+sintético, não anotação humana.
 
 
 ## Métricas

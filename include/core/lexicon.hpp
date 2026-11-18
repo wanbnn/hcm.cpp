@@ -38,6 +38,7 @@ public:
 
     size_t entries() const { return entries_.size(); }
     size_t collocations() const { return collocations_.size(); }
+    const std::unordered_map<std::string, uint32_t>& collocation_counts() const { return collocations_; }
     size_t memory_bytes() const;
     bool empty() const { return entries_.empty(); }
 
