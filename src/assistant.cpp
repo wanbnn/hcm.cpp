@@ -181,6 +181,7 @@ AssistantReply AssistantSession::respond(const std::string& input, CodeLanguage 
         options.title = content_plan.shape == ResponseShape::DOCUMENT;
         options.headings = content_plan.shape == ResponseShape::DOCUMENT;
         options.natural = true;
+        options.discourse = &model_.discourse;
         DocumentPlanner planner;
         reply.text = planner.realize(content_plan.document, surface, rules, options);
         reply.trace.decision_override = "CONTENT: " + content_plan.rationale;

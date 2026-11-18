@@ -4,6 +4,7 @@
 #include "core/language_rules.hpp"
 #include "core/realizer.hpp"
 #include "core/term_resolver.hpp"
+#include "core/discourse_config.hpp"
 #include "core/text_parser.hpp"
 
 #include <cstdint>
@@ -50,6 +51,7 @@ struct RenderOptions {
     bool headings = true;
     bool natural = false; // cohesive prose: coordination, pronouns, ordinals
     size_t max_sentences = 0; // 0 = no limit
+    const DiscourseConfig* discourse = nullptr;
 };
 
 /// Hierarchical document generation: goal -> outline -> paragraphs -> sentence

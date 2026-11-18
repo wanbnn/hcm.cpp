@@ -1,0 +1,3 @@
+{"id":"part_of_formed","pattern":"{SUBJ} é formado {OBJS}.","relation":"HAS_PART","cost":0.10}
+{"id":"part_of_composed","pattern":"{SUBJ} é composto {OBJS}.","relation":"HAS_PART","cost":0.15}
+{"id":"part_of_belongs","pattern":"{SUBJ} faz parte {OBJS}.","relation":"PART_OF","cost":0.10}

@@ -107,6 +107,8 @@ set(COGNICORE_SOURCES
     src/term_resolver.cpp
     src/content_planner.cpp
     src/natural_prose.cpp
+    src/discourse_generation.cpp
+    src/discourse_config.cpp
     src/model_bundle.cpp
 )
 
@@ -231,6 +233,11 @@ target_link_libraries(test_marco19_content PRIVATE cognicore_lib)
 target_compile_options(test_marco19_content PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)
 target_compile_definitions(test_marco19_content PRIVATE COGNICORE_DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data")
 add_test(NAME test_marco19_content COMMAND test_marco19_content)
+
+add_executable(test_marco20_discourse tests/test_marco20_discourse.cpp)
+target_link_libraries(test_marco20_discourse PRIVATE cognicore_lib)
+target_compile_options(test_marco20_discourse PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)
+add_test(NAME test_marco20_discourse COMMAND test_marco20_discourse)
 
 add_executable(test_no_fallback tests/test_no_fallback.cpp)
 target_link_libraries(test_no_fallback PRIVATE cognicore_lib)

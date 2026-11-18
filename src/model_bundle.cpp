@@ -898,6 +898,7 @@ bool ModelBundle::load(const std::string& dir_path, bool use_mmap) {
     else if (language_rules.empty())
         language_rules.load_default();
     if (fs::exists(dir_path + "/parser_pt.json")) parser.load_parser_json(dir_path + "/parser_pt.json");
+    discourse.load(dir_path);
     terms.clear();
     if (fs::exists(dir_path + "/terms.tsv")) terms.load(dir_path + "/terms.tsv");
     lexicon.load_synonyms(language_rules);

@@ -1,5 +1,6 @@
 #include "core/document_planner.hpp"
 #include "core/natural_prose.hpp"
+#include "core/discourse_generation.hpp"
 
 #include <algorithm>
 #include <set>
@@ -233,7 +234,8 @@ std::string DocumentPlanner::realize(const DocumentPlan& plan,
         for (size_t p = 0; p < section.paragraphs.size(); ++p) {
             const auto& paragraph = section.paragraphs[p];
             if (options.natural) {
-                const auto natural = NaturalProseRealizer{}.realize(paragraph, rules);
+                auto natural = DiscourseGenerator{}.realize(paragraph, rules, options.discourse);
+                if (natural.empty()) natural = NaturalProseRealizer{}.realize(paragraph, rules);
                 if (!natural.empty()) {
                     section_out << natural << "\n\n";
                     emitted_sentences += paragraph.sentences.size();

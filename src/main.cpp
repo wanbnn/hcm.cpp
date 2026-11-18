@@ -646,6 +646,7 @@ int cmd_write(int argc, char** argv) {
     DocumentPlanner renderer;
     RenderOptions options;
     options.natural = true;
+    options.discourse = &bundle.discourse;
     const auto text = renderer.realize(plan, *mouth, bundle.language_rules, options);
     if (text.empty()) { std::cerr << "Não há fatos suficientes sobre o tópico.\n"; return 1; }
     const auto output = get_arg(argc, argv, "--out");

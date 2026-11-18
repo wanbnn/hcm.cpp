@@ -188,22 +188,45 @@ apenas como override de teste.
   `DocumentPlanner` virou renderizador de `ContentPlan`; chat e `write` usam o
   mesmo motor.
 
-### Prosa natural
+### Prosa natural: planejamento de discurso
 
-O `NaturalProseRealizer` agrupa fatos por sujeito/relação antes de realizar:
+O pipeline agora é:
 
-- coordena objetos de partes: “O motor de combustão interna é formado pelo
-  conjunto móvel, pelo cabeçote e pelo bloco.”;
-- usa pronomes para o tópico repetido: “Ele produz o trabalho. Ele usa o ciclo
-  Otto.”;
-- usa ordinais em sequências: “Primeiro, a admissão precede a compressão; em
-  seguida, ...; por fim, ...”.
+```text
+ContentPlan
+  → TextPlan (EntityIds, proposições, tipos de sentença)
+  → DiscourseState + ReferenceGenerator (Cf/Cb, pronomes, ambiguidade)
+  → Aggregator (CoordinationPlan, agreement)
+  → ConstructionBank (constructions_pt.jsonl)
+  → DiscourseGenerator
+  → GenerationSearch (repetição + pronome + comprimento + construções)
+```
 
-Não é geração neural palavra por palavra: é composição simbólica com
-coesão de discurso. Isso evita a saída anterior, que repetia o sujeito inteiro
-em cada frase e apenas colava sentenças prontas. Ainda há limites de
-concordância em compostos coordenados e em termos menos frequentes, mas o
-texto agora tem parágrafos coesos, não uma lista de fatos justapostos.
+- `TextPlan` mantém entidades/proposições com IDs, tópico, foco e
+  dado/novo.
+- `DiscourseState` mantém centros forward/backward, saliência, última menção
+  e features ambíguas.
+- `ReferenceGenerator` usa pronome só quando o centro é o mesmo e não há
+  outro candidato com o mesmo gênero/número.
+- `Aggregator` transforma fatos de parte/todo em uma `CoordinationPlan`
+  plural, com preposição e concordância resolvidas.
+- `constructions_pt.jsonl` contém as construções de superfície e custos
+  (`é formado`, `é composto`, `faz parte`).
+- `discourse_pt.json` contém distância máxima de pronome e pesos da busca.
+- `GenerationSearch` não escolhe a primeira realização: gera variantes e
+  seleciona pela função de custo.
+
+Exemplo:
+
+```text
+O motor de combustão interna é formado pelo conjunto móvel, pelo cabeçote e pelo bloco.
+O motor de combustão interna transforma a queima da mistura. Ele produz o trabalho. Ele usa o ciclo otto.
+```
+
+Ainda é composição simbólica, não geração neural palavra por palavra. O
+ganho é estrutural: coordenação, referência e discurso são decididos antes da
+superfície. Limitações restantes: agreement de coordenações compostas
+(`pelas bielas e pelos êmbolos`) e construções menos frequentes.
 
 
 ## Métricas

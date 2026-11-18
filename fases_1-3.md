@@ -553,3 +553,306 @@ Resposta honesta sobre “competir com LLM”
 - Em domínios estreitos e verificáveis — explicação causal sobre um grafo, documentação técnica, geração de código sobre APIs conhecidas, matemática de problema de palavra — é possível competir ou até ganhar em auditabilidade e custo.
 - Em conversa aberta, criatividade e conhecimento geral, sem uma camada neural massiva e sem escala de dados, não é realista no curto prazo. A arquitetura pode chegar lá em qualidade de texto se ganhar planejamento hierárquico, léxico e gramática; mas isso é um projeto de vários marcos, não um ajuste.
 Se quiser, o próximo passo mais rentável é o Marco 12 (DocumentPlanner + estado de discurso + revisão). É ele que transforma “gerador de frases” em “gerador de textos”.
+
+---
+
+Diagnóstico
+O problema atual não é “falta de um template melhor”. É que a geração ainda trata cada fato como uma frase isolada:
+grafo → 1 fato → 1 sentence plan → 1 cláusula → concatenação
+Isso produz:
+- repetição do sujeito;
+- ausência de estado discursivo;
+- coordenação só no nível de string;
+- pronomes por comparação de strings;
+- ordinais fixos;
+- nenhuma noção de tópico, foco, dado/novo, ambiguidade referencial;
+- nenhuma busca entre formas alternativas de dizer a mesma coisa.
+O salto de qualidade exige separar:
+o que dizer  →  como organizar  →  como se referir  →  como realizar
+E representar cada uma dessas etapas explicitamente.
+Princípio arquitetural
+Gerar texto como um plano discursivo e escolher a melhor realização por busca, não por concatenação gulosa.
+O pipeline recomendado:
+Grafo tipado + Entity IDs
+        ↓
+ContentPlan (objetivo, AnswerGraph, movimentos retóricos)
+        ↓
+TextPlan (parágrafos, sentenças, proposições, relações retóricas)
+        ↓
+DiscourseState + ReferencePlan (centering, pronomes, elipses)
+        ↓
+AggregationPlan (coordenação, relativas, listas, compartilhamento de sujeito)
+        ↓
+ConstructionPlan (DOP/construções, ordem, voz, conectores)
+        ↓
+SurfacePlan (morfologia, concordância, contrações, pontuação)
+        ↓
+Busca/ranqueamento (PPM + coerência + custo discursivo)
+        ↓
+Texto final
+A chave é que cada etapa tem uma representação própria e o texto final é escolhido por uma função de custo, não por um if de template.
+1. Camada semântica: entidades e proposições
+Hoje o grafo usa strings. Para coesão real, precisamos de:
+using EntityId = uint32_t;
+
+struct Proposition {
+    EntityId subject;
+    RelationId relation;
+    EntityId object;
+    RelationType type;
+    GramGender gender;
+    GramNumber number;
+    bool negated;
+    GramTense tense;
+    std::string modality;
+    Provenance provenance;
+};
+Adicionar ao grafo:
+- Entity com id, canonical_name, aliases, type, gender, number, salience.
+- Mention com entity_id, surface, sentence_position, grammatical_role.
+- Sequence como estrutura de ordem, não como fatos soltos.
+- Coordination como estrutura: lista de entidades + determinante/preposição compartilhada.
+Benefícios:
+- pronome deixa de ser comparação de string;
+- ambiguidade referencial pode ser detectada;
+- concordância de coordenação é calculada;
+- o mesmo fato pode aparecer com formas diferentes sem duplicar nós.
+Arquivos sugeridos:
+include/core/semantic_ir.hpp
+include/core/entity_graph.hpp
+src/entity_graph.cpp
+2. ContentPlan → TextPlan
+O ContentPlanner já escolhe objetivo e movimentos. Falta um TextPlan entre conteúdo e superfície:
+struct SentencePlan {
+    std::vector<Proposition> propositions;
+    RhetoricalRelation relation;
+    EntityId topic;
+    EntityId focus;
+    bool given_topic;
+    bool contrast;
+};
+
+struct ParagraphPlan {
+    std::string heading;
+    std::vector<SentencePlan> sentences;
+    std::vector<EntityId> discourse_stack;
+};
+
+struct TextPlan {
+    CommunicativeGoal goal;
+    ResponseShape shape;
+    std::vector<ParagraphPlan> paragraphs;
+    DiscourseState state;
+};
+O TextPlanner decide:
+- quais proposições entram em cada sentença;
+- qual é o tópico e o foco;
+- o que é dado vs. novo;
+- onde usar coordenação, relativa, subordinação ou elipse;
+- a ordem das sentenças.
+Isso evita a geração “um fato = uma frase”.
+Arquivos:
+include/core/text_plan.hpp
+include/core/text_planner.hpp
+src/text_planner.cpp
+3. DiscourseState e centering
+Adicionar um estado discursivo por parágrafo:
+struct DiscourseState {
+    std::vector<EntityId> forward_centers; // Cf: sujeito > objeto > oblíquo
+    EntityId backward_center = INVALID;    // Cb
+    std::unordered_map<EntityId, int> salience;
+    std::unordered_map<EntityId, Mention> last_mention;
+    std::set<std::pair<GramGender, GramNumber>> ambiguous_features;
+};
+Algoritmo de centering:
+1. ordenar os centros por papel gramatical: sujeito > objeto > outros;
+2. Cb = entidade mais saliente do Cf anterior que aparece na sentença atual;
+3. usar pronome se:
+- a entidade é o Cb atual;
+- não há outra entidade compatível em gênero/número;
+- a distância discursiva não é grande;
+4. usar NP definido completo se:
+- a entidade foi reintroduzida;
+- há ambiguidade;
+- mudou o foco;
+5. usar elipse/zero anafórico em coordenação de mesmo sujeito quando a construção permitir.
+Isso resolve:
+O motor de combustão interna contém o bloco.
+Ele contém o cabeçote.
+e evita:
+O motor contém o bloco. O motor contém o cabeçote. O motor contém ...
+Arquivos:
+include/core/discourse_state.hpp
+include/core/reference_generator.hpp
+src/reference_generator.cpp
+4. Agregação e coordenação como estruturas
+Não coordenar strings; coordenar estruturas.
+struct CoordinationPlan {
+    std::vector<EntityId> conjuncts;
+    std::string determiner;    // o/a/os/as
+    std::string preposition;   // de/por/em...
+    GramGender gender;         // resolvido
+    GramNumber number;         // plural
+};
+Regras:
+- mesmo sujeito + mesma relação + múltiplos objetos:
+- agrupar em uma única sentença;
+- contém X, Y e Z;
+- concordância plural;
+- preposição repetida ou compartilhada conforme a construção.
+- mesmo sujeito + relações diferentes:
+- usar pronome ou elipse;
+- escolher entre coordenação de VP, relativa ou subordinação.
+- mesma relação + sujeitos diferentes:
+- usar coordenação de sujeitos quando semanticamente coerente;
+- caso contrário, sentenças separadas com conectivo.
+Agreement de coordenação:
+- todos femininos → feminino plural;
+- mistura → masculino plural;
+- singular + plural → plural;
+- preposições contraídas por conjunto (pelas bielas e pelos êmbolos), não só no primeiro.
+Arquivos:
+include/core/aggregation_plan.hpp
+src/aggregator.cpp
+5. Planejamento de sentença e construções (DOP)
+Substituir a escolha fixa de padrão por um inventário de construções com restrições e custos:
+struct Construction {
+    std::string id;
+    std::string pattern;       // [SUBJ] [VERB] [OBJ], [SUBJ] [VERB] [OBJ1] e [OBJ2]
+    std::vector<SlotConstraint> slots;
+    RelationType relation;
+    RhetoricalRelation rhetorical;
+    int formality;
+    double cost;
+};
+O ConstructionPlanner escolhe entre:
+- SVO simples;
+- coordenação de objetos;
+- coordenação de VPs;
+- relativa (que ...);
+- subordinação causal (porque ...);
+- passiva;
+- elipse de sujeito;
+- construção de sequência (primeiro ...; em seguida ...);
+- construção de definição (X é um Y que ...).
+As construções vêm do corpus/modelo:
+constructions_pt.jsonl
+Aprender DOP a partir de sentenças alinhadas a fatos/proposições. O AnalogicalFluencyRealizer já tem fragmentos DOP; ele pode ser integrado como fonte de construções, não como concatenação.
+Arquivos:
+include/core/construction_planner.hpp
+src/construction_planner.cpp
+data/constructions_pt.jsonl
+6. Escolha lexical e colocação
+O Lexicon já tem colocações e sinônimos. Usar isso no planejamento:
+- escolher verbo por relação + objeto (gere calor vs. produza calor);
+- escolher conectivo por relação retórica;
+- evitar repetição de verbo/conectivo no parágrafo;
+- respeitar registro/tom (técnico, didático, casual).
+Isso não deve ser hardcoded; deve vir de:
+language_rules.json
+lexicon.bin
+collocations
+7. Geração como busca
+O ponto mais importante: não escolher a primeira realização; enumerar e ranquear.
+Estados de busca:
+proposições ainda não realizadas
++ DiscourseState
++ TextPlan parcial
+Ações:
+- agregar proposições;
+- escolher construção;
+- escolher referência (pronome/NP/elipse);
+- escolher conector;
+- escolher ordem.
+Custo:
+custo_total =
+    PPM/coerência
+  + penalidade de repetição
+  + penalidade de ambiguidade referencial
+  + penalidade de violação de centering
+  + penalidade de comprimento
+  + penalidade de conectivo repetido
+  + custo da construção
+  - cobertura de fatos
+Busca em beam search com largura pequena (ex.: 4–16), podando por custo e por cobertura.
+Isso permite escolher entre:
+O motor contém o bloco, o cabeçote e o conjunto móvel.
+O motor é formado pelo bloco, pelo cabeçote e pelo conjunto móvel.
+O motor inclui bloco, cabeçote e conjunto móvel.
+e escolher a melhor segundo o modelo, o tom e o contexto.
+Arquivos:
+include/core/generation_search.hpp
+src/generation_search.cpp
+8. Dados do modelo (nada fixo no C++)
+Toda a informação linguística deve ficar no diretório do modelo:
+parser_pt.json            # morfologia, verbos, preposições, gênero, stopwords
+language_rules.json       # templates, conectivos, ordinais, seções
+discourse_pt.json         # preferências de centering, RST, pronomes
+constructions_pt.jsonl    # inventário DOP/construções e custos
+morphology_pt.json        # concordância, contrações, ordinais, irregulars
+entity_types.json         # tipos de entidade e restrições
+lexicon.bin               # sinônimos, colocações, frequência
+O código só consome. O usuário pode editar a prosódia, os conectivos, as construções e a morfologia sem recompilar.
+9. Aprendizado simbólico
+Sem Transformer, mas com aprendizado real:
+1. Mineração de construções do corpus:
+- extrair padrões sintáticos recorrentes do TextParser;
+- armazenar slots, relação e custo;
+- usar frequency, PMI e colocação do Lexicon.
+2. Ranqueador de coesão:
+- features: centering, distância, ambiguidade, repetição, conector, comprimento;
+- treinar um Tsetlin pequeno ou uma regressão simbólica com rótulos heurísticos + humanos;
+- persistir em discourse_ranker.bin.
+3. Preferências de referência:
+- aprender quando o corpus usa pronome vs. NP definido vs. elipse, condicionado a gênero/número/distância/papel.
+4. Avaliação humana:
+- planilhas reais de fluência/coerência; nenhuma nota fabricada.
+10. Avaliação
+Além de PPM/perplexidade:
+- coesão referencial: precisão de pronomes, taxa de ambiguidade, entity grid;
+- coesão lexical: cadeias lexicais, repetição de conteúdo;
+- agregação: sentenças por fato, tamanho médio, variação de comprimento;
+- ordenação: acurácia de sequência, uso de ordinais;
+- cobertura: proposições realizadas / proposições disponíveis;
+- naturalidade: avaliação humana cega (Likert + preferência);
+- aderência ao formato: BRIEF/EXPLANATORY/DOCUMENT, número de parágrafos;
+- ablação: sem pronomes, sem agregação, sem busca, sem ordinais.
+11. Fases de implementação
+Fase 0 — IR e discurso
+- EntityId, Proposition, Mention, TextPlan, DiscourseState.
+- Testes de identidade, aliases, gênero/número, sequência.
+Fase 1 — Reference Generation
+- Centering, pronomes, NP definido/indefinido, elipse, detecção de ambiguidade.
+- Testes com “motor”, “biela”, “árvore de manivelas”, “válvulas”.
+Fase 2 — Agregação e coordenação
+- CoordinationPlan, agreement de coordenação, contrações por conjunto.
+- Testes: “é formado pelo bloco, pelo cabeçote e pelo conjunto móvel”; “pelas bielas e pelos êmbolos”.
+Fase 3 — Construções e sequência
+- ConstructionPlanner, DOP, relativas, subordinação, passiva, ordinais.
+- Testes de mecanismo: definição → partes → funcionamento → sequência.
+Fase 4 — Coesão de parágrafo
+- RST, conectivos por relação, tópico/foco, cadeias lexicais, transições.
+- Testes de documento multi-parágrafo.
+Fase 5 — Busca e ranqueamento
+- Beam search com PPM + custo discursivo.
+- Testes de escolha entre construções alternativas.
+Fase 6 — Aprendizado e avaliação
+- Mineração de construções, ranker de coesão, avaliação humana, benchmark.
+- Documentação e model cards.
+12. Riscos e decisões
+- Explosão combinatória: beam pequeno + poda por custo/cobertura.
+- Pronome ambíguo: fallback conservador para NP completo.
+- Concordância de coordenação mista: regra explícita, testada.
+- Construções ruidosas do corpus: confiança mínima e validação sintática.
+- Não prometer fluência de LLM: o objetivo é prosa simbólica coesa, auditável e melhor que templates.
+- Não colocar texto no C++: tudo em arquivos do modelo.
+Recomendação final
+O caminho mais inteligente não é “melhorar o template de parágrafo”. É implementar:
+1. Entity IDs + proposições tipadas;
+2. TextPlan + DiscourseState;
+3. Reference Generation com centering;
+4. Aggregation/Coordination como estruturas;
+5. ConstructionPlanner com DOP;
+6. Busca com custo discursivo + PPM;
+7. Tudo parametrizado por arquivos do modelo.
+Isso transforma a geração de “juntar fatos” em planejamento de discurso com escolha de realizações, que é o que produz prosa coesa de verdade — e continua 100% simbólico, auditável e treinável sem Transformer.

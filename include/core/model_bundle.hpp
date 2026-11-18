@@ -13,6 +13,7 @@
 #include "core/analogical_realizer.hpp"
 #include "core/sdm.hpp"
 #include "core/term_resolver.hpp"
+#include "core/discourse_config.hpp"
 #include "core/text_parser.hpp"
 #include "core/tsetlin.hpp"
 #include "core/vsa.hpp"
@@ -38,6 +39,7 @@ struct ModelBundle {
     EpisodicMemory episodic_memory;
     ContextMemory context_memory;
     TermResolver terms;
+    DiscourseConfig discourse;
     CausalGraph graph;
     std::shared_ptr<MappedCausalGraph> mapped_graph;
     CodeGraph code_graph;
