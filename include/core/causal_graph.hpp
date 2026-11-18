@@ -71,6 +71,9 @@ struct CausalStep {
     GramGender dst_gender = GramGender::MASC;
     GramNumber dst_number = GramNumber::SING;
     uint32_t edge_id = UINT32_MAX; // Snapshot-local provenance; never serialized as GraphEdge.
+    // Optional surface-only lexical choices. They never change the graph fact
+    // and are ignored by structural plan verification.
+    std::string surface_rel, surface_src, surface_dst;
 };
 
 struct CausalPath {

@@ -23,6 +23,7 @@ namespace cognicore {
 
 ModelBundle::ModelBundle() {
     language_rules.load_default();
+    lexicon.load_synonyms(language_rules);
 }
 
 namespace {
@@ -608,8 +609,9 @@ ModelBundle::InferenceTrace ModelBundle::infer_and_respond(const std::string& us
     }
     trace.plan = plan;
     stage("PLANO");
+    const auto lexical_plan = LexicalChooser{}.apply(plan, lexicon);
     if (const auto* fluent = dynamic_cast<const AnalogicalFluencyRealizer*>(surface)) {
-        const auto derivation = fluent->derive(plan);
+        const auto derivation = fluent->derive(lexical_plan);
         trace.response = derivation.candidates[derivation.selected].text;
         std::ostringstream audit;
         audit << "candidatas=" << derivation.candidates.size() << " selecionada=" << derivation.selected << " fragmentos recuperados=";
@@ -621,7 +623,7 @@ ModelBundle::InferenceTrace ModelBundle::infer_and_respond(const std::string& us
             for (auto id : c.fragment_ids) audit << id << ",";
         }
         trace.fluency_evidence = audit.str();
-    } else trace.response = surface ? surface->realize(plan) : realizer.realize(plan);
+    } else trace.response = surface ? surface->realize(lexical_plan) : realizer.realize(lexical_plan);
     stage("REALIZADOR");
 
     // Persist the short-term discourse state for the next turn.
@@ -676,6 +678,7 @@ bool ModelBundle::save(const std::string& dir_path) const {
     fs::create_directories(dir_path, ec);
     if (ec) return false;
     if (!language_rules.save(dir_path + "/language_rules.json")) return false;
+    if (!lexicon.save(dir_path + "/lexicon.bin")) return false;
 
     {
         BinaryWriter w(dir_path + "/episodic_facts.bin");
@@ -880,6 +883,9 @@ bool ModelBundle::load(const std::string& dir_path, bool use_mmap) {
         language_rules.load(dir_path + "/language_rules.json");
     else if (language_rules.empty())
         language_rules.load_default();
+    lexicon.load_synonyms(language_rules);
+    if (fs::exists(dir_path + "/lexicon.bin")) lexicon.load(dir_path + "/lexicon.bin");
+    else lexicon.clear();
     // 1. Codebook
     {
         MappedReader r(dir_path + "/codebook.bin", use_mmap);

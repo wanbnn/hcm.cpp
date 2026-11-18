@@ -5,6 +5,7 @@
 #include "core/episodic_memory.hpp"
 #include "core/graph_mmap.hpp"
 #include "core/language_rules.hpp"
+#include "core/lexicon.hpp"
 #include "core/code_ast.hpp"
 #include "core/realizer.hpp"
 #include "core/analogical_realizer.hpp"
@@ -21,6 +22,7 @@ namespace cognicore {
 struct ModelBundle {
     ModelBundle();
     LanguageRules language_rules;
+    Lexicon lexicon;
     Codebook codebook;
     KanervaSDM sdm;
     TsetlinMachine tsetlin;

@@ -182,31 +182,33 @@ std::string MorphologicalRealizer::realize_clause(const CausalStep& step,
                                                   const std::string& subject_surface,
                                                   const std::string& lang,
                                                   const std::string& pattern) const {
+    const std::string relation = step.surface_rel.empty() ? step.rel : step.surface_rel;
+    const std::string object = step.surface_dst.empty() ? step.dst : step.surface_dst;
     std::string verb_phrase;
     if (lang == "en") {
         if (!step.modality.empty()) {
             verb_phrase = step.modality + (step.negated ? " not " : " ") +
-                          conjugate_verb(step.rel, GramTense::INF, step.src_number, "en");
+                          conjugate_verb(relation, GramTense::INF, step.src_number, "en");
         } else if (step.negated && step.tense == GramTense::FUT) {
-            verb_phrase = "will not " + conjugate_verb(step.rel, GramTense::INF, step.src_number, "en");
-        } else if (step.negated && conjugate_verb(step.rel, GramTense::INF, step.src_number, "en") == "be") {
+            verb_phrase = "will not " + conjugate_verb(relation, GramTense::INF, step.src_number, "en");
+        } else if (step.negated && conjugate_verb(relation, GramTense::INF, step.src_number, "en") == "be") {
             verb_phrase = conjugate_verb("be", step.tense, step.src_number, "en") + " not";
         } else if (step.negated) {
             std::string aux = (step.src_number == GramNumber::PLUR) ? "do not " : "does not ";
             if (step.tense == GramTense::PAST) aux = "did not ";
-            verb_phrase = aux + conjugate_verb(step.rel, GramTense::INF, step.src_number, "en");
+            verb_phrase = aux + conjugate_verb(relation, GramTense::INF, step.src_number, "en");
         } else {
-            verb_phrase = conjugate_verb(step.rel, step.tense, step.src_number, "en");
+            verb_phrase = conjugate_verb(relation, step.tense, step.src_number, "en");
         }
     } else {
         // PT-BR
         std::string neg_prefix = step.negated ? "não " : "";
         if (!step.modality.empty()) {
             std::string mod_conj = conjugate_verb(step.modality, step.tense, step.src_number, "pt");
-            std::string inf_v = conjugate_verb(step.rel, GramTense::INF, step.src_number, "pt");
+            std::string inf_v = conjugate_verb(relation, GramTense::INF, step.src_number, "pt");
             verb_phrase = neg_prefix + mod_conj + " " + inf_v;
         } else {
-            verb_phrase = neg_prefix + conjugate_verb(step.rel, step.tense, step.src_number, "pt");
+            verb_phrase = neg_prefix + conjugate_verb(relation, step.tense, step.src_number, "pt");
         }
     }
 
@@ -216,15 +218,15 @@ std::string MorphologicalRealizer::realize_clause(const CausalStep& step,
             if (lower.starts_with(article)) return noun;
         return definite_article(gender, number, lang) + " " + noun;
     };
-    std::string obj_phrase = noun_phrase(step.dst, step.dst_gender, step.dst_number);
+    std::string obj_phrase = noun_phrase(object, step.dst_gender, step.dst_number);
     if (step.type == RelationType::TAXONOMIC && lang == "pt") {
         obj_phrase = (step.dst_number == GramNumber::PLUR
             ? (step.dst_gender == GramGender::FEM ? "umas " : "uns ")
-            : (step.dst_gender == GramGender::FEM ? "uma " : "um ")) + step.dst;
+            : (step.dst_gender == GramGender::FEM ? "uma " : "um ")) + object;
     }
 
     if (step.type == RelationType::PROPERTY) {
-        obj_phrase = step.dst;
+        obj_phrase = object;
         if (lang == "pt") {
             if (step.src_gender == GramGender::FEM && obj_phrase.ends_with("o")) obj_phrase.back() = 'a';
             if (step.src_number == GramNumber::PLUR && !obj_phrase.ends_with("s")) obj_phrase += "s";
@@ -278,6 +280,7 @@ std::string MorphologicalRealizer::realize(const SemanticPlan& plan) const {
 
     for (size_t i = 0; i < steps.size(); ++i) {
         const auto& st = steps[i];
+        const std::string subject_name = st.surface_src.empty() ? st.src : st.surface_src;
 
         // Choose subject surface (full NP vs pronoun/anaphora)
         std::string subj_surface;
@@ -297,15 +300,15 @@ std::string MorphologicalRealizer::realize(const SemanticPlan& plan) const {
             if (lang == "en") {
                 subj_surface = (st.src_number == GramNumber::PLUR) ? "they" : "it";
             } else {
-                subj_surface = definite_article(st.src_gender, st.src_number, lang) + " " + st.src;
+                subj_surface = definite_article(st.src_gender, st.src_number, lang) + " " + subject_name;
             }
         } else {
-            subj_surface = definite_article(st.src_gender, st.src_number, lang) + " " + st.src;
+            subj_surface = definite_article(st.src_gender, st.src_number, lang) + " " + subject_name;
         }
 
-        const auto lower = TextParser::utf8_tolower(st.src);
+        const auto lower = TextParser::utf8_tolower(subject_name);
         for (const auto* article : {"o ", "a ", "os ", "as ", "the "})
-            if (lower.starts_with(article) && subj_surface.ends_with(st.src)) { subj_surface = st.src; break; }
+            if (lower.starts_with(article) && subj_surface.ends_with(subject_name)) { subj_surface = subject_name; break; }
         std::string clause = realize_clause(st, subj_surface, lang);
 
         std::string conn;

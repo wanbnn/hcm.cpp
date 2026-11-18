@@ -265,5 +265,19 @@
   ],
   "document_title": [
     "{topic}: uma explicação causal"
+  ],
+  "verb_synonyms": [
+    "gerar|produzir|provocar|causar",
+    "causar|provocar|gerar",
+    "derreter|fundir",
+    "impedir|bloquear|evitar",
+    "aumentar|elevar",
+    "reduzir|diminuir"
+  ],
+  "noun_synonyms": [
+    "servidor|máquina|host",
+    "grafo|rede",
+    "memória|RAM",
+    "calor|energia térmica"
   ]
 }

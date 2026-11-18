@@ -159,6 +159,7 @@ int cmd_ingest_books(int argc, char** argv) {
     for (const auto& fpath : files) {
         const std::string text = read_file_text(fpath);
         if (text.empty()) continue;
+        bundle.lexicon.observe(text, bundle.parser, "technical");
 
         auto doc = (parser_mode == "conllu" || fs::path(fpath).extension() == ".conllu")
             ? bundle.parser.parse_conllu(text) : bundle.parser.parse_text(text);
@@ -253,6 +254,10 @@ int cmd_train_dialogue(int argc, char** argv) {
 
         auto toks = bundle.parser.tokenize(text);
         bundle.realizer.observe_sentence_tokens(toks);
+        std::string tone = "technical";
+        if (intent_str == "EXPLAIN_CAUSE" || intent_str == "HYPOTHESIZE") tone = "didactic";
+        else if (intent_str == "GREET" || intent_str == "THANK" || intent_str == "SMALLTALK") tone = "casual";
+        bundle.lexicon.observe(text, bundle.parser, tone);
         bundle.fluent_realizer.observe(text, bundle.parser);
         for (auto& pair : realizer_document_pairs(bundle.parser.parse_text(text)))
             bundle.realizer_pairs.push_back(std::move(pair));
@@ -409,6 +414,8 @@ int cmd_stats(int argc, char** argv) {
               << "; mmap=" << bundle.fluent_realizer.mapped() << "\n"
               << "  Contexto discursivo    : " << bundle.context_memory.entities().size()
               << " entidades, turno " << bundle.context_memory.turn() << "\n"
+              << "  Lexico do corpus       : " << bundle.lexicon.entries() << " entradas, "
+              << bundle.lexicon.collocations() << " colocacoes\n"
               << "  Tamanho em disco       : " << (disk_bytes / 1024.0) << " KB\n"
               << "  RAM estimada           : " << (ram_bytes / 1024.0) << " KB\n";
     return 0;

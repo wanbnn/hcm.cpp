@@ -98,6 +98,7 @@ set(COGNICORE_SOURCES
     src/code_synthesizer.cpp
     src/episodic_memory.cpp
     src/language_rules.cpp
+    src/lexicon.cpp
     src/math_solver.cpp
     src/model_bundle.cpp
 )
@@ -187,6 +188,11 @@ add_executable(test_marco12_document tests/test_marco12_document.cpp)
 target_link_libraries(test_marco12_document PRIVATE cognicore_lib)
 target_compile_options(test_marco12_document PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)
 add_test(NAME test_marco12_document COMMAND test_marco12_document)
+
+add_executable(test_marco13_lexicon tests/test_marco13_lexicon.cpp)
+target_link_libraries(test_marco13_lexicon PRIVATE cognicore_lib)
+target_compile_options(test_marco13_lexicon PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)
+add_test(NAME test_marco13_lexicon COMMAND test_marco13_lexicon)
 
 add_executable(test_improvements tests/test_improvements.cpp)
 target_link_libraries(test_improvements PRIVATE cognicore_lib)

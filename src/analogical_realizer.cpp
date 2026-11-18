@@ -37,10 +37,11 @@ void field(char* dst, size_t capacity, const std::string& text) {
     std::memset(dst, 0, capacity); std::memcpy(dst, text.data(), std::min(capacity - 1, text.size()));
 }
 std::string subject_phrase(const CausalStep& step, const std::string& lang) {
-    const auto lower = TextParser::utf8_tolower(step.src);
+    const auto& name = step.surface_src.empty() ? step.src : step.surface_src;
+    const auto lower = TextParser::utf8_tolower(name);
     for (const auto* a : {"o ", "a ", "os ", "as ", "um ", "uma ", "the ", "an "})
-        if (lower.starts_with(a)) return step.src;
-    return MorphologicalRealizer::definite_article(step.src_gender, step.src_number, lang) + " " + step.src;
+        if (lower.starts_with(a)) return name;
+    return MorphologicalRealizer::definite_article(step.src_gender, step.src_number, lang) + " " + name;
 }
 std::string capitalize(std::string s) { if (!s.empty() && static_cast<unsigned char>(s[0]) < 128) s[0] = char(std::toupper(static_cast<unsigned char>(s[0]))); return s; }
 std::string lower_initial(std::string s) {
