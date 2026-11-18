@@ -212,6 +212,11 @@ target_link_libraries(test_marco16_symbolic_math PRIVATE cognicore_lib)
 target_compile_options(test_marco16_symbolic_math PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)
 add_test(NAME test_marco16_symbolic_math COMMAND test_marco16_symbolic_math)
 
+add_executable(test_marco17_code_tests tests/test_marco17_code_tests.cpp)
+target_link_libraries(test_marco17_code_tests PRIVATE cognicore_lib)
+target_compile_options(test_marco17_code_tests PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)
+add_test(NAME test_marco17_code_tests COMMAND test_marco17_code_tests)
+
 add_executable(test_improvements tests/test_improvements.cpp)
 target_link_libraries(test_improvements PRIVATE cognicore_lib)
 target_compile_options(test_improvements PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)

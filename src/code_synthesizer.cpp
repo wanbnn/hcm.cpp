@@ -7,7 +7,9 @@
 #include <map>
 #include <sstream>
 #include <filesystem>
+#include <fstream>
 #include <cctype>
+#include <cstdlib>
 
 namespace cognicore {
 
@@ -99,6 +101,7 @@ bool identifier_boundary(const std::string& text, size_t position, size_t length
 } // namespace
 
 CodeSynthesizer::CodeSynthesizer() : pattern_tm_(make_code_tm_cfg()) {
+    rules_.load_default();
     // Baseline structural pattern training
     train_patterns({
         {"ler arquivo de texto", CodePatternTag::READ_AND_PROCESS},
@@ -448,4 +451,106 @@ CodeSynthesisResult CodeSynthesizer::synthesize(const std::string& task_descript
     if (!res.syntax_valid) { res.code.clear(); res.error = "A validação AST rejeitou a composição."; }
     return res;
 }
+CodeSynthesisResult CodeSynthesizer::synthesize_tested(const std::string& task_description,
+                                                       CodeLanguage lang,
+                                                       const CodeGraph& graph,
+                                                       const Codebook& codebook,
+                                                       const std::vector<CodeTestCase>& tests,
+                                                       const std::string& workspace) const {
+    CodeSynthesisResult baseline = synthesize(task_description, lang, graph, codebook);
+    std::vector<std::string> candidates;
+    if (rules_.contains_any(task_description, rules_.list_sum_cues)) {
+        if (lang == CodeLanguage::PYTHON) {
+            candidates.push_back(
+                "def synthesized_pipeline(values):\n"
+                "    total = 0\n"
+                "    for value in values:\n"
+                "        total += value\n"
+                "    return total\n");
+            candidates.push_back(
+                "def synthesized_pipeline(values):\n"
+                "    if not values:\n"
+                "        return 0\n"
+                "    total = 0\n"
+                "    for value in values:\n"
+                "        total += value\n"
+                "    return total\n");
+        } else if (lang == CodeLanguage::JAVASCRIPT || lang == CodeLanguage::TYPESCRIPT) {
+            candidates.push_back(
+                "function synthesizedPipeline(values) {\n"
+                "  let total = 0;\n"
+                "  for (const value of values) total += value;\n"
+                "  return total;\n"
+                "}\n");
+        } else if (lang == CodeLanguage::CPP) {
+            candidates.push_back(
+                "#include <vector>\n\n"
+                "int synthesized_pipeline(const std::vector<int>& values) {\n"
+                "    int total = 0;\n"
+                "    for (int value : values) total += value;\n"
+                "    return total;\n"
+                "}\n");
+        }
+    }
+    if (baseline.syntax_valid) candidates.push_back(baseline.code);
+
+    CodeSynthesisResult best = baseline;
+    best.iterations = 0;
+    best.generated_tests.clear();
+    for (const auto& test : tests)
+        best.generated_tests.push_back("f(" + test.input + ") == " + test.expected);
+    if (tests.empty()) return best;
+
+    std::error_code ec;
+    const auto temporary = workspace.empty()
+        ? std::filesystem::temp_directory_path(ec) : std::filesystem::path(workspace);
+    if (ec) { best.error = "Sem diretório para executar os testes."; return best; }
+    const auto candidate_path = temporary / "__cognicore_candidate.py";
+    const auto driver_path = temporary / "__cognicore_test_driver.py";
+
+    for (size_t i = 0; i < candidates.size(); ++i) {
+        ++best.iterations;
+        const auto& candidate = candidates[i];
+        if (!TreeSitterCodeParser::validate_syntax(candidate, lang)) continue;
+        if (lang != CodeLanguage::PYTHON) {
+            best.code = candidate;
+            best.syntax_valid = true;
+            best.repair_notes = "Testes executáveis apenas para Python; candidato validado por Tree-sitter.";
+            return best;
+        }
+        {
+            std::ofstream out(candidate_path);
+            if (!out) { best.error = "Falha ao escrever candidato."; return best; }
+            out << candidate;
+        }
+        {
+            std::ofstream out(driver_path);
+            if (!out) { best.error = "Falha ao escrever testes."; return best; }
+            out << "from __cognicore_candidate import synthesized_pipeline\n";
+            for (const auto& test : tests)
+                out << "assert synthesized_pipeline(" << test.input << ") == (" << test.expected << ")\n";
+            out << "print('ok')\n";
+        }
+        std::ostringstream command;
+        command << "cd \"" << temporary.string() << "\" && python3 \"" << driver_path.filename().string()
+                << "\" >/dev/null 2>&1";
+        if (std::system(command.str().c_str()) == 0) {
+            best.code = candidate;
+            best.syntax_valid = true;
+            best.error.clear();
+            best.repair_notes = "CEGIS: candidato #" + std::to_string(i + 1) + " passou em todos os testes.";
+            std::filesystem::remove(candidate_path, ec);
+            std::filesystem::remove(driver_path, ec);
+            return best;
+        }
+        best.repair_notes += "Candidato #" + std::to_string(i + 1) + " falhou nos testes. ";
+    }
+    best.syntax_valid = false;
+    best.code.clear();
+    if (best.error.empty()) best.error = "Nenhum candidato passou nos testes.";
+    std::filesystem::remove(candidate_path, ec);
+    std::filesystem::remove(driver_path, ec);
+    return best;
+}
+
 } // namespace cognicore

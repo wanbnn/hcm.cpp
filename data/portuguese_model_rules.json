@@ -316,5 +316,17 @@
     "they",
     "this",
     "that"
+  ],
+  "list_sum_cues": [
+    "soma",
+    "somar",
+    "sum",
+    "total",
+    "lista",
+    "list",
+    "vetor",
+    "vector",
+    "acumular",
+    "reduce"
   ]
 }
