@@ -75,6 +75,13 @@ nenhuma nota humana foi inventada. Use
 `scripts/evaluate_fluency_human.py score` depois que avaliadores reais
 preencherem as notas.
 
+## Marcos 12–18
+
+O artefato agora carrega também `lexicon.bin`, `coherence.bin`,
+`ingestion_manifest.jsonl` e as regras de documento/gramática em
+`language_rules.json`. Comandos novos: `write`, `ingest-corpus`, `math` e
+`--realizer lexical`. Detalhes em [Marcos 12–18](MILESTONES_12_18.md).
+
 ## Limites
 
 - O parser de dependências é interno e baseado em regras; não é UDPipe nem um

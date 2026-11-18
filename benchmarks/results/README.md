@@ -13,14 +13,15 @@ benchmarks and the numbers are not comparable to public leaderboard scores.
 | code generation (HumanEval-style) | 2 | 2 | 100% |
 | patch (SWE-bench-style) | 1 | 1 | 100% |
 | fluency checks (strict vs fluent) | 3 | 3 | 100% |
+| long-form generation | 3 | 3 | 100% |
 
 Additional metrics:
 
-- PPM-C calibration probe: 2.216 bits/byte, perplexity 4.647 (small
+- PPM-C calibration probe: 2.201 bits/byte, perplexity 4.599 (small
   hand-written probe, not a representative held-out corpus).
-- Peak child RSS measured by the runner: ~626 MB for the CLI process.
+- Peak child RSS measured by the runner: ~634 MB for the CLI process.
 - Detailed answers, latencies and code are in `benchmark_report.json`.
-- `fluency_rating_sheet.jsonl` is empty by design. Human ratings were not
+- `fluency_rating_sheet.jsonl` and `long_form_rating_sheet.jsonl` are empty by design. Human ratings were not
   fabricated; fill it with real raters and use
   `scripts/evaluate_fluency_human.py score`.
 

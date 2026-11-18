@@ -123,7 +123,8 @@ def prepare_model(cli, source_model, out_dir):
     if model.exists():
         shutil.rmtree(model)
     shutil.copytree(source_model, model)
-    stdout, _ = run([cli, "ingest-books", "--input", ROOT / "benchmarks/data/science_facts.txt", "--model", model])
+    run([cli, "ingest-books", "--input", ROOT / "benchmarks/data/science_facts.txt", "--model", model])
+    run([cli, "ingest-books", "--input", ROOT / "benchmarks/data/long_form_facts.txt", "--model", model])
     stdout, _ = run([cli, "train-realizer", "--model", model])
     return model, stdout
 
@@ -249,6 +250,53 @@ def run_fluency(cli, model, out_dir):
     return result
 
 
+LONG_TOPICS = [
+    ("calor", ["calor", "gelo"]),
+    ("chuva", ["chuva", "umidade"]),
+    ("memória", ["memória", "memoria", "grafo"]),
+]
+
+
+def run_long_form(cli, model, out_dir):
+    details, elapsed = [], 0.0
+    candidates = []
+    for index, (topic, expected) in enumerate(LONG_TOPICS):
+        fluent, fluent_cost = run([cli, "write", "--model", model, "--topic", topic,
+                                   "--sections", "5", "--paragraphs", "2", "--realizer", "fluent"])
+        strict, strict_cost = run([cli, "write", "--model", model, "--topic", topic,
+                                   "--sections", "5", "--paragraphs", "2", "--realizer", "strict"])
+        elapsed += fluent_cost + strict_cost
+        sections = fluent.count("\n## ")
+        paragraphs = len([line for line in fluent.splitlines() if line and not line.startswith('#')])
+        sentences = [part for part in fluent.replace('\n', ' ').split('. ') if part.strip()]
+        unique = len(set(sentences))
+        coverage = matches(fluent, expected)
+        correct = (fluent.startswith("# ") and sections >= 2 and paragraphs >= 3 and coverage)
+        details.append({
+            "topic": topic,
+            "chars": len(fluent),
+            "sections": sections,
+            "paragraphs": paragraphs,
+            "sentences": len(sentences),
+            "unique_sentence_ratio": round(unique / len(sentences), 4) if sentences else 0.0,
+            "expected": expected,
+            "coverage": coverage,
+            "correct": correct,
+            "text": fluent,
+        })
+        candidates.append({"id": f"long_form_{index}", "prompt": topic,
+                           "system_a": strict, "system_b": fluent})
+    candidates_path = out_dir / "long_form_candidates.jsonl"
+    sheet_path = out_dir / "long_form_rating_sheet.jsonl"
+    candidates_path.write_text("\n".join(json.dumps(item, ensure_ascii=False) for item in candidates) + "\n")
+    run([sys.executable, ROOT / "scripts/evaluate_fluency_human.py", "generate",
+         "--candidates", candidates_path, "--out", sheet_path])
+    result = category_result("long_form_generation", details, elapsed)
+    result["human_rating_sheet"] = str(sheet_path)
+    result["note"] = "Long-form checks are automatic (coverage/structure/repetition); human ratings are not fabricated."
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--cli", type=Path, default=ROOT / "build/cognicore")
@@ -270,6 +318,7 @@ def main():
         categories["code"] = run_code(args.cli, model, workspace, work)
         categories["patch"] = run_patch(args.cli, model, workspace, work)
         categories["fluency"] = run_fluency(args.cli, model, args.out)
+        categories["long_form"] = run_long_form(args.cli, model, args.out)
 
         calibration, _ = run([args.cli, "evaluate-fluency", "--model", model,
                               "--input", ROOT / "benchmarks/data/heldout_pt.txt"])

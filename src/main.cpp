@@ -22,6 +22,7 @@ namespace {
 void print_usage() {
     std::cout << "Uso:\n"
               << "  cognicore ingest-books --input <dir_ou_txt> --model <dir_modelo> [--parser rules|conllu] [--style-only] [--use-gpu]\n"
+              << "  cognicore ingest-corpus --input <dir_ou_arquivo> --model <dir_modelo> [--format auto|text|jsonl] [--checkpoint-every N] [--limit-files N] [--limit-records N] [--style-only] [--use-gpu]\n"
               << "  cognicore train-dialogue --input <conversas.jsonl> --model <dir_modelo> [--epochs 20] [--use-gpu]\n"
               << "  cognicore evaluate-dialogue --input <avaliacao.jsonl> --model <dir_modelo> [--out <metricas.json>]\n"
               << "  cognicore consolidate --model <dir_modelo>\n"
@@ -210,6 +211,129 @@ int cmd_ingest_books(int argc, char** argv) {
               << " | Nos no grafo: " << bundle.graph.num_nodes()
               << " | Frames: " << bundle.realizer.num_frames()
               << " | Uso: " << (style_only ? "somente estilo/associação" : "fatos e estilo") << "\n";
+    return 0;
+}
+
+int cmd_ingest_corpus(int argc, char** argv) {
+    const auto input = get_arg(argc, argv, "--input");
+    const auto model_dir = get_arg(argc, argv, "--model");
+    if (input.empty() || model_dir.empty()) { print_usage(); return 1; }
+    const bool use_gpu = has_flag(argc, argv, "--use-gpu");
+    const bool style_only = has_flag(argc, argv, "--style-only");
+    const auto format = get_arg(argc, argv, "--format", "auto");
+    const size_t checkpoint = std::stoul(get_arg(argc, argv, "--checkpoint-every", "10"));
+    const size_t limit_files = std::stoul(get_arg(argc, argv, "--limit-files", "0"));
+    const size_t limit_records = std::stoul(get_arg(argc, argv, "--limit-records", "0"));
+    const size_t max_vocab = std::stoul(get_arg(argc, argv, "--max-vocab", "0"));
+    const size_t context_stride = std::stoul(get_arg(argc, argv, "--context-stride", "1"));
+    if (format != "auto" && format != "text" && format != "jsonl") {
+        std::cerr << "Formato inválido: use auto, text ou jsonl.\n";
+        return 1;
+    }
+
+    ModelBundle bundle;
+    if (fs::exists(model_dir + "/codebook.bin") && !bundle.load(model_dir, false)) {
+        std::cerr << "Erro ao carregar modelo existente.\n";
+        return 1;
+    }
+    load_rules_if_present(bundle.parser);
+    fs::create_directories(model_dir);
+    const auto manifest_path = fs::path(model_dir) / "ingestion_manifest.jsonl";
+    std::unordered_map<std::string, std::string> processed;
+    if (fs::exists(manifest_path)) {
+        std::ifstream manifest(manifest_path);
+        std::string line;
+        while (std::getline(manifest, line)) {
+            const auto path = extract_json_str(line, "path");
+            const auto size = extract_json_str(line, "size");
+            if (!path.empty()) processed[path] = size;
+        }
+    }
+    std::ofstream manifest(manifest_path, std::ios::app);
+
+    std::vector<std::string> files;
+    if (fs::is_directory(input)) {
+        for (const auto& entry : fs::recursive_directory_iterator(input)) {
+            if (!entry.is_regular_file()) continue;
+            const auto ext = entry.path().extension().string();
+            if (ext == ".txt" || ext == ".jsonl" || ext == ".md" || ext == ".conllu")
+                files.push_back(entry.path().string());
+        }
+    } else files.push_back(input);
+    std::sort(files.begin(), files.end());
+    if (limit_files && files.size() > limit_files) files.resize(limit_files);
+
+    size_t records = 0, new_files = 0;
+    auto observe = [&](const std::string& text) {
+        if (text.empty()) return;
+        auto document = bundle.parser.parse_text(text);
+        for (const auto& toks : document.sentences_tokens) {
+            bundle.realizer.observe_sentence_tokens(toks);
+            for (size_t i = 0; i < toks.size(); i += std::max<size_t>(1, context_stride)) {
+                if (max_vocab && bundle.codebook.size() >= max_vocab && !bundle.codebook.contains(toks[i])) continue;
+                std::vector<std::string> context;
+                for (size_t j = (i >= 2 ? i - 2 : 0); j <= std::min(toks.size() - 1, i + 2); ++j)
+                    if (i != j && (!max_vocab || bundle.codebook.size() < max_vocab || bundle.codebook.contains(toks[j])))
+                        context.push_back(toks[j]);
+                bundle.codebook.observe_context(toks[i], context);
+            }
+        }
+        bundle.lexicon.observe(text, bundle.parser, "technical");
+        bundle.coherence.observe(text, bundle.parser);
+        bundle.fluent_realizer.observe(text, bundle.parser, &document);
+        if (!style_only) {
+            for (const auto& triple : document.triples) {
+                bundle.graph.add_fact(triple.subject, triple.relation, triple.object, triple.type,
+                                      triple.confidence, false, triple.negated, triple.tense,
+                                      triple.modality, triple.subj_gender, triple.subj_number,
+                                      triple.obj_gender, triple.obj_number);
+                bundle.sdm.write(HyperVector::from_token(triple.subject),
+                                 HyperVector::from_token(triple.object), use_gpu);
+            }
+            for (auto& pair : realizer_document_pairs(document)) bundle.realizer_pairs.push_back(std::move(pair));
+            for (const auto& frame : document.frames) bundle.realizer.add_frame(frame);
+        }
+    };
+
+    for (const auto& file : files) {
+        std::error_code ec;
+        const auto size = fs::file_size(file, ec);
+        if (ec) continue;
+        const auto size_text = std::to_string(size);
+        if (processed[file] == size_text) continue;
+        std::ifstream in(file);
+        if (!in) continue;
+        const auto ext = fs::path(file).extension().string();
+        const bool jsonl = format == "jsonl" || (format == "auto" && ext == ".jsonl");
+        if (jsonl) {
+            std::string line;
+            while (std::getline(in, line)) {
+                auto text = extract_json_str(line, "text");
+                if (text.empty()) text = extract_json_str(line, "content");
+                if (text.empty()) continue;
+                observe(text);
+                ++records;
+                if (limit_records && records >= limit_records) break;
+            }
+        } else {
+            std::ostringstream buffer;
+            buffer << in.rdbuf();
+            observe(buffer.str());
+        }
+        if (limit_records && records >= limit_records) break;
+        manifest << "{\"path\":\"" << json_escape(file) << "\",\"size\":\"" << size_text << "\"}\n" << std::flush;
+        processed[file] = size_text;
+        ++new_files;
+        if (checkpoint && new_files % checkpoint == 0) {
+            bundle.codebook.finalize_semantics();
+            if (!bundle.save(model_dir)) { std::cerr << "Erro ao salvar checkpoint.\n"; return 1; }
+        }
+    }
+    bundle.codebook.finalize_semantics();
+    if (!bundle.save(model_dir)) { std::cerr << "Erro ao salvar modelo.\n"; return 1; }
+    std::cout << "[ingest-corpus] arquivos novos=" << new_files << " registros=" << records
+              << " vocabulario=" << bundle.codebook.size() << " grafo=" << bundle.graph.num_nodes()
+              << "/" << bundle.graph.num_edges() << "\n";
     return 0;
 }
 
@@ -621,6 +745,7 @@ int run_cli(int argc, char** argv) {
     }
     const std::string cmd = argv[1];
     if (cmd == "ingest-books")   return cmd_ingest_books(argc, argv);
+    if (cmd == "ingest-corpus")  return cmd_ingest_corpus(argc, argv);
     if (cmd == "train-dialogue") return cmd_train_dialogue(argc, argv);
     if (cmd == "evaluate-dialogue") return cmd_evaluate_dialogue(argc, argv);
     if (cmd == "consolidate")    return cmd_consolidate(argc, argv);

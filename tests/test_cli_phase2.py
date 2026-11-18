@@ -50,6 +50,19 @@ with tempfile.TemporaryDirectory(prefix='cognicore_cli_') as directory:
     unsupported = subprocess.run([cli, 'chat', '--model', str(model), '--realizer', 'neural'],
                                  input='sair\n', text=True, capture_output=True)
     assert unsupported.returncode != 0
+    corpus = root / 'corpus'
+    corpus.mkdir()
+    (corpus / 'a.txt').write_text('O vento gera movimento.\n')
+    (corpus / 'b.jsonl').write_text(json.dumps({'text': 'O movimento gera energia.'}) + '\n')
+    corpus_model = root / 'corpus_model'
+    first = run('ingest-corpus', '--input', corpus, '--model', corpus_model, '--checkpoint-every', '1')
+    assert 'arquivos novos=2' in first
+    second = run('ingest-corpus', '--input', corpus, '--model', corpus_model, '--checkpoint-every', '1')
+    assert 'arquivos novos=0' in second
+    assert (corpus_model / 'ingestion_manifest.jsonl').is_file()
+    assert (corpus_model / 'lexicon.bin').is_file()
+    assert (corpus_model / 'coherence.bin').is_file()
+
     run('ingest-books', '--model', model, '--input', book)
     unsupported = subprocess.run([cli, 'chat', '--model', str(model), '--realizer', 'neural'],
                                  input='sair\n', text=True, capture_output=True)

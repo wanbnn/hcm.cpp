@@ -1,0 +1,25 @@
+A memória associativa relaciona conceitos.
+O grafo causal conecta fatos.
+O planejador escolhe uma tese.
+O planejador pode anexar uma alternativa.
+A chuva causa umidade.
+A umidade causa corrosão.
+O calor derrete gelo.
+O gelo é um sólido.
+O atrito gera calor.
+A fotossíntese produz glicose.
+O vento gera movimento.
+O movimento gera energia.
+A evaporação causa chuva.
+A chuva gera umidade.
+A umidade causa corrosão.
+A chuva causa erosão.
+A erosão causa perda de solo.
+A memória gera associações.
+O cérebro gera memória.
+A memória causa aprendizado.
+O aprendizado gera conhecimento.
+O ruído impede memória.
+O grafo causal gera caminhos.
+O planejador produz um outline.
+A revisão remove repetições.

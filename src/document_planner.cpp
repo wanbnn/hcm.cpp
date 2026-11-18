@@ -156,11 +156,9 @@ DocumentPlan DocumentPlanner::plan(const std::string& topic,
             if (has_taxonomic(path)) add_unique(intro, seen_intro, path);
         }
     }
-    // Ensure introduction is never empty: a direct fact is a valid opening.
-    if (intro.empty()) {
-        for (const auto& path : causes) { add_unique(intro, seen_intro, path); if (!intro.empty()) break; }
-        for (const auto& path : consequences) { add_unique(intro, seen_intro, path); if (!intro.empty()) break; }
-    }
+    // Do not steal the only consequence/cause to fill an empty introduction:
+    // sparse topics are better served by starting with their causal section.
+    // Taxonomy/property facts remain the preferred opening when present.
     // Conclusion reuses the strongest consequence (or cause) as a closing route.
     std::vector<CausalPath> conclusion;
     std::set<std::string> seen_conclusion;

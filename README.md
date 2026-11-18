@@ -36,7 +36,10 @@ fixadas. Asserções ficam ativas nos testes mesmo em Release.
 ./build_rocm/cognicore consolidate --model modelo
 ./build_rocm/cognicore stats --model modelo
 ./build_rocm/cognicore evaluate-fluency --model modelo --input amostra.txt
-./build_rocm/cognicore chat --model modelo --debug
+./build_rocm/cognicore ingest-corpus --input corpus/ --model modelo
+./build_rocm/cognicore write --model modelo --topic calor --realizer fluent
+./build_rocm/cognicore math --expr "2x + 3 = 11"
+./build_rocm/cognicore chat --model modelo --realizer lexical --debug
 ```
 
 O parser padrão de texto livre agora inclui análise de dependências interna por
@@ -91,6 +94,13 @@ de estilo em C++/HIP; `fluency.bin` mantém produções e contagens PPM consult�
 | 9 | Seleção Tsetlin e composição estrutural de chamadas compatíveis; impressão e validação sintática com Tree-sitter. Testes compilam/executam C++ e executam Python gerados. |
 | 10, readequado | `AnalogicalFluencyRealizer`: produções DOP restritas, beam search, verificação semântica/morfológica, PPM e Tsetlin de estilo; `train-realizer`, `strict` e `fluent`; arquivo de fluência consultado por mmap. |
 | 11 | Roteador Tsetlin de cinco classes, conversa, aprendizado imediato, raciocínio causal, assistência de código e sessões persistentes. |
+| 12 | `DocumentPlanner`: outline, seções, parágrafos, revisão e comando `write`. |
+| 13 | `Lexicon`: escolha lexical, sinônimos, colocação, registro e `lexicon.bin`. |
+| 14 | `LexicalizedGrammarRealizer`: relativas, subordinação, agregação e pontuação (`--realizer lexical`). |
+| 15 | `CoherenceModel`: Kneser-Ney/cache, centering e ancoragem no grafo (`coherence.bin`). |
+| 16 | `SymbolicMath`: frações, potências, porcentagens, equações lineares e verificação (`math`). |
+| 17 | `synthesize_tested`: candidatos com controle de fluxo, testes Python e reparo CEGIS. |
+| 18 | `ingest-corpus` incremental com manifesto/checkpoint, benchmark de texto longo e planilhas humanas. |
 
 O realizador recebe somente um `SemanticPlan` através de `ISurfaceRealizer`.
 As construções preenchem sujeitos, predicados e objetos do plano. N-gramas escolhem
@@ -159,10 +169,13 @@ python3 benchmarks/run_benchmarks.py \
   --out benchmarks/results
 ```
 
-O relatório inclui respostas, latências, calibração PPM e pico de RSS. A planilha
-de avaliação humana é gerada vazia; notas só entram quando avaliadores reais
-devolvem o arquivo preenchido.
+O relatório inclui respostas, latências, calibração PPM, categorias de geração
+longa e pico de RSS. As planilhas de avaliação humana (fluência e texto longo)
+são geradas vazias; notas só entram quando avaliadores reais devolvem o arquivo
+preenchido.
 
 Detalhes da execução simbólica, memória episódica, regras condicionais e limites atuais: [Raciocínio auditável](docs/SYMBOLIC_REASONING.md).
 
 Implementação e limites do novo Marco 10: [fluência analógica](docs/ANALOGICAL_FLUENCY.md).
+Marcos 12–18 (documento, léxico, gramática lexicalizada, coerência, matemática,
+código testado e ingestão massiva): [detalhes](docs/MILESTONES_12_18.md).
