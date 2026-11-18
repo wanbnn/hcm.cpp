@@ -101,15 +101,21 @@
     "programa"
   ],
   "math_cues": [
+    "calcule",
+    "equacao",
+    "equation",
+    "equação",
+    "how many",
+    "how much",
+    "quantas",
     "quanto",
     "quantos",
-    "quantas",
-    "calcule",
+    "resolva",
+    "resolver",
     "resultado",
+    "solve",
     "total",
-    "what is",
-    "how many",
-    "how much"
+    "what is"
   ],
   "resource_cues": [
     "ram",

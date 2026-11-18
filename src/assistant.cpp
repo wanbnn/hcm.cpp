@@ -1,6 +1,7 @@
 #include "core/assistant.hpp"
 #include "core/math_solver.hpp"
 #include "core/morphological_realizer.hpp"
+#include "core/symbolic_math.hpp"
 #include <algorithm>
 #include <cctype>
 #include <optional>
@@ -171,7 +172,14 @@ AssistantReply AssistantSession::respond(const std::string& input, CodeLanguage 
     std::optional<std::string> math_answer;
     if (math_cue && !resource_context &&
         (reply.route == AssistantRoute::CONVERSATIONAL_GENERAL || reply.route == AssistantRoute::FACT_UPDATE)) {
-        if (const auto solved = MathSolver{}.solve(input)) {
+        const SymbolicMath symbolic(model_.language_rules);
+        if (const auto equation = symbolic.solve(input)) {
+            math_answer = "Resultado: " + equation->variable + " = " + equation->value.to_string() + ".";
+            reply.trace.decision_override = "MATH: equação linear simbólica";
+        } else if (const auto evaluated = symbolic.evaluate(input)) {
+            math_answer = "Resultado: " + evaluated->value.to_string() + ".";
+            reply.trace.decision_override = "MATH: aritmética racional simbólica";
+        } else if (const auto solved = MathSolver{}.solve(input)) {
             math_answer = "Resultado: " + std::to_string(solved->value) + ".";
             reply.trace.decision_override = "MATH: aritmética inteira simbólica";
         }

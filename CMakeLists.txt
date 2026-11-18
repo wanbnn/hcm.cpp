@@ -102,6 +102,7 @@ set(COGNICORE_SOURCES
     src/lexicon.cpp
     src/lexicalized_realizer.cpp
     src/math_solver.cpp
+    src/symbolic_math.cpp
     src/model_bundle.cpp
 )
 
@@ -205,6 +206,11 @@ add_executable(test_marco15_coherence tests/test_marco15_coherence.cpp)
 target_link_libraries(test_marco15_coherence PRIVATE cognicore_lib)
 target_compile_options(test_marco15_coherence PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)
 add_test(NAME test_marco15_coherence COMMAND test_marco15_coherence)
+
+add_executable(test_marco16_symbolic_math tests/test_marco16_symbolic_math.cpp)
+target_link_libraries(test_marco16_symbolic_math PRIVATE cognicore_lib)
+target_compile_options(test_marco16_symbolic_math PRIVATE ${COGNICORE_CXX_FLAGS} -UNDEBUG)
+add_test(NAME test_marco16_symbolic_math COMMAND test_marco16_symbolic_math)
 
 add_executable(test_improvements tests/test_improvements.cpp)
 target_link_libraries(test_improvements PRIVATE cognicore_lib)

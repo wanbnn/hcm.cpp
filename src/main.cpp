@@ -3,6 +3,7 @@
 #include "core/document_planner.hpp"
 #include "core/lexicalized_realizer.hpp"
 #include "core/morphological_realizer.hpp"
+#include "core/symbolic_math.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -29,7 +30,8 @@ void print_usage() {
               << "  cognicore code --model <dir_modelo> --workspace <dir> --lang cpp|py|js --task <descrição>\n"
               << "  cognicore train-realizer --model <dir_modelo> [--use-gpu]\n"
               << "  cognicore evaluate-fluency --model <dir_modelo> --input <texto> [--out <relatorio.json>]\n"
-              << "  cognicore write --model <dir_modelo> --topic <assunto> [--sections N] [--paragraphs N] [--realizer strict|fluent] [--out <arquivo.md>]\n"
+              << "  cognicore write --model <dir_modelo> --topic <assunto> [--sections N] [--paragraphs N] [--realizer strict|lexical|fluent] [--out <arquivo.md>]\n"
+              << "  cognicore math --expr \"2x + 3 = 11\" [--model <dir_modelo>]\n"
               << "  cognicore chat --model <dir_modelo> [--workspace <dir>] [--realizer strict|fluent] [--lang cpp|py|js] [--debug]\n";
 }
 
@@ -484,6 +486,31 @@ int cmd_write(int argc, char** argv) {
     return 0;
 }
 
+int cmd_math(int argc, char** argv) {
+    const auto expression = get_arg(argc, argv, "--expr");
+    if (expression.empty()) { print_usage(); return 1; }
+    LanguageRules rules;
+    const auto model = get_arg(argc, argv, "--model");
+    if (!model.empty()) {
+        ModelBundle bundle;
+        if (!bundle.load(model, true)) return 1;
+        rules = bundle.language_rules;
+    } else rules.load_default();
+    SymbolicMath math(rules);
+    if (const auto equation = math.solve(expression)) {
+        std::cout << equation->variable << " = " << equation->value.to_string() << "\n";
+        std::cout << equation->steps << "\n";
+        return 0;
+    }
+    if (const auto evaluated = math.evaluate(expression)) {
+        std::cout << evaluated->value.to_string() << "\n";
+        std::cout << evaluated->steps << "\n";
+        return 0;
+    }
+    std::cerr << "Expressão não reconhecida.\n";
+    return 1;
+}
+
 int cmd_chat(int argc, char** argv) {
     const std::string model_dir = get_arg(argc, argv, "--model");
     const bool debug = has_flag(argc, argv, "--debug");
@@ -603,6 +630,7 @@ int run_cli(int argc, char** argv) {
     if (cmd == "train-realizer") return cmd_train_realizer(argc, argv);
     if (cmd == "evaluate-fluency") return cmd_evaluate_fluency(argc, argv);
     if (cmd == "write") return cmd_write(argc, argv);
+    if (cmd == "math") return cmd_math(argc, argv);
     if (cmd == "chat" || cmd == "assistant")           return cmd_chat(argc, argv);
 
     print_usage();
