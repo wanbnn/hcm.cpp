@@ -208,7 +208,7 @@ AssistantReply AssistantSession::respond(const std::string& input, CodeLanguage 
             ? rules.render_template(rules.api_not_found_templates, rules.language, input, {{"symbol", input}})
             : out.str();
     } else {
-        reply.trace = model_.infer_and_respond(input, reply.route == AssistantRoute::FACT_UPDATE, mouth);
+        reply.trace = model_.infer_and_respond(input, online_learning_, mouth);
         reply.text = reply.trace.response;
 
     }

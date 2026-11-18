@@ -21,8 +21,8 @@ namespace {
 
 void print_usage() {
     std::cout << "Uso:\n"
-              << "  cognicore ingest-books --input <dir_ou_txt> --model <dir_modelo> [--parser rules|conllu] [--style-only] [--use-gpu]\n"
-              << "  cognicore ingest-corpus --input <dir_ou_arquivo> --model <dir_modelo> [--format auto|text|jsonl] [--checkpoint-every N] [--limit-files N] [--limit-records N] [--style-only] [--use-gpu]\n"
+              << "  cognicore ingest-books --input <dir_ou_txt> --model <dir_modelo> [--parser rules|conllu] [--style-only|--fact-n-style-only|--facts-only] [--use-gpu]\n"
+              << "  cognicore ingest-corpus --input <dir_ou_arquivo> --model <dir_modelo> [--format auto|text|jsonl] [--checkpoint-every N] [--limit-files N] [--limit-records N] [--style-only|--fact-n-style-only] [--use-gpu]\n"
               << "  cognicore train-dialogue --input <conversas.jsonl> --model <dir_modelo> [--epochs 20] [--use-gpu]\n"
               << "  cognicore evaluate-dialogue --input <avaliacao.jsonl> --model <dir_modelo> [--out <metricas.json>]\n"
               << "  cognicore consolidate --model <dir_modelo>\n"
@@ -33,7 +33,7 @@ void print_usage() {
               << "  cognicore evaluate-fluency --model <dir_modelo> --input <texto> [--out <relatorio.json>]\n"
               << "  cognicore write --model <dir_modelo> --topic <assunto> [--sections N] [--paragraphs N] [--realizer strict|lexical|fluent] [--out <arquivo.md>]\n"
               << "  cognicore math --expr \"2x + 3 = 11\" [--model <dir_modelo>]\n"
-              << "  cognicore chat --model <dir_modelo> [--workspace <dir>] [--realizer strict|lexical|fluent] [--lang cpp|py|js] [--debug]\n";
+              << "  cognicore chat --model <dir_modelo> [--workspace <dir>] [--realizer strict|lexical|fluent] [--lang cpp|py|js] [--online-learning] [--debug]\n";
 }
 
 std::string get_arg(int argc, char** argv, const std::string& flag, const std::string& def = "") {
@@ -129,6 +129,12 @@ int cmd_ingest_books(int argc, char** argv) {
     const bool use_gpu = has_flag(argc, argv, "--use-gpu");
     const std::string parser_mode = get_arg(argc, argv, "--parser", "rules");
     const bool style_only = has_flag(argc, argv, "--style-only");
+    const bool fact_n_style = has_flag(argc, argv, "--fact-n-style-only");
+    const bool facts_only = has_flag(argc, argv, "--facts-only");
+    if (int(style_only) + int(fact_n_style) + int(facts_only) > 1) {
+        std::cerr << "Escolha um modo: --style-only, --fact-n-style-only ou --facts-only.\n";
+        return 1;
+    }
     const size_t max_vocab = std::stoul(get_arg(argc, argv, "--max-vocab", "0"));
     const size_t context_stride = std::stoul(get_arg(argc, argv, "--context-stride", "1"));
     if (!context_stride) throw std::invalid_argument("--context-stride deve ser positivo");
@@ -163,12 +169,14 @@ int cmd_ingest_books(int argc, char** argv) {
     for (const auto& fpath : files) {
         const std::string text = read_file_text(fpath);
         if (text.empty()) continue;
-        bundle.lexicon.observe(text, bundle.parser, "technical");
-        bundle.coherence.observe(text, bundle.parser);
+        if (!facts_only) {
+            bundle.lexicon.observe(text, bundle.parser, "technical");
+            bundle.coherence.observe(text, bundle.parser);
+        }
 
         auto doc = (parser_mode == "conllu" || fs::path(fpath).extension() == ".conllu")
             ? bundle.parser.parse_conllu(text) : bundle.parser.parse_text(text);
-        for (const auto& s_toks : doc.sentences_tokens) {
+        if (!facts_only) for (const auto& s_toks : doc.sentences_tokens) {
             bundle.realizer.observe_sentence_tokens(s_toks);
             for (size_t i = 0; i < s_toks.size(); i += context_stride) {
                 if (max_vocab && bundle.codebook.size() >= max_vocab && !bundle.codebook.contains(s_toks[i])) continue;
@@ -179,10 +187,12 @@ int cmd_ingest_books(int argc, char** argv) {
                 bundle.codebook.observe_context(s_toks[i], ctx);
             }
         }
-        if (fs::path(fpath).extension() != ".conllu") bundle.fluent_realizer.observe(text, bundle.parser, &doc);
-        else for (const auto& tokens : doc.sentences_tokens) {
-            std::string sentence; for (const auto& t : tokens) { if (!sentence.empty()) sentence += " "; sentence += t; }
-            bundle.fluent_realizer.observe(sentence, bundle.parser, &doc);
+        if (!facts_only) {
+            if (fs::path(fpath).extension() != ".conllu") bundle.fluent_realizer.observe(text, bundle.parser, &doc);
+            else for (const auto& tokens : doc.sentences_tokens) {
+                std::string sentence; for (const auto& t : tokens) { if (!sentence.empty()) sentence += " "; sentence += t; }
+                bundle.fluent_realizer.observe(sentence, bundle.parser, &doc);
+            }
         }
         if (!style_only) for (const auto& tr : doc.triples) {
             bundle.graph.add_fact(tr.subject, tr.relation, tr.object, tr.type, tr.confidence, false,
@@ -194,7 +204,7 @@ int cmd_ingest_books(int argc, char** argv) {
             ++total_triples;
         }
         if (!style_only) for (auto& pair : realizer_document_pairs(doc)) bundle.realizer_pairs.push_back(std::move(pair));
-        for (const auto& cf : doc.frames) {
+        if (!facts_only) for (const auto& cf : doc.frames) {
             bundle.realizer.add_frame(cf);
         }
     }
@@ -210,7 +220,9 @@ int cmd_ingest_books(int argc, char** argv) {
               << " | Triplas extraidas: " << total_triples
               << " | Nos no grafo: " << bundle.graph.num_nodes()
               << " | Frames: " << bundle.realizer.num_frames()
-              << " | Uso: " << (style_only ? "somente estilo/associação" : "fatos e estilo") << "\n";
+              << " | Uso: " << (style_only ? "somente estilo/associação"
+                  : facts_only ? "somente fatos no grafo/SDM (--facts-only)"
+                  : fact_n_style ? "fatos e estilo (--fact-n-style-only)" : "fatos e estilo") << "\n";
     return 0;
 }
 
@@ -220,6 +232,11 @@ int cmd_ingest_corpus(int argc, char** argv) {
     if (input.empty() || model_dir.empty()) { print_usage(); return 1; }
     const bool use_gpu = has_flag(argc, argv, "--use-gpu");
     const bool style_only = has_flag(argc, argv, "--style-only");
+    const bool fact_n_style = has_flag(argc, argv, "--fact-n-style-only");
+    if (style_only && fact_n_style) {
+        std::cerr << "Use --style-only ou --fact-n-style-only, não ambos.\n";
+        return 1;
+    }
     const auto format = get_arg(argc, argv, "--format", "auto");
     const size_t checkpoint = std::stoul(get_arg(argc, argv, "--checkpoint-every", "10"));
     const size_t limit_files = std::stoul(get_arg(argc, argv, "--limit-files", "0"));
@@ -333,7 +350,8 @@ int cmd_ingest_corpus(int argc, char** argv) {
     if (!bundle.save(model_dir)) { std::cerr << "Erro ao salvar modelo.\n"; return 1; }
     std::cout << "[ingest-corpus] arquivos novos=" << new_files << " registros=" << records
               << " vocabulario=" << bundle.codebook.size() << " grafo=" << bundle.graph.num_nodes()
-              << "/" << bundle.graph.num_edges() << "\n";
+              << "/" << bundle.graph.num_edges()
+              << " modo=" << (style_only ? "style" : "facts+style") << "\n";
     return 0;
 }
 
@@ -490,8 +508,12 @@ int cmd_consolidate(int argc, char** argv) {
     const size_t pruned = bundle.graph.consolidate();
     bundle.realizer.consolidate_frames();
     bundle.sdm.binarize_for_inference();
-    bundle.sparse_tsetlin = bundle.tsetlin.export_sparse();
-    bundle.has_sparse_tsetlin = true;
+    // A already-consolidated sparse model must not be rebuilt from the empty
+    // dense Tsetlin buffer loaded from disk.
+    if (!bundle.has_sparse_tsetlin) {
+        bundle.sparse_tsetlin = bundle.tsetlin.export_sparse();
+        bundle.has_sparse_tsetlin = true;
+    }
 
     if (!bundle.save(model_dir)) {
         std::cerr << "Erro ao salvar modelo consolidado.\n";
@@ -671,10 +693,13 @@ int cmd_chat(int argc, char** argv) {
         } else mouth = &bundle.fluent_realizer;
     } else { std::cerr << "Realizador inválido: use strict, lexical ou fluent.\n"; return 1; }
     AssistantSession session(bundle);
+    session.set_online_learning(has_flag(argc, argv, "--online-learning"));
     const auto language = string_to_code_lang(get_arg(argc, argv, "--lang", "cpp"));
     if (language == CodeLanguage::UNKNOWN) { std::cerr << "Linguagem inválida.\n"; return 1; }
     std::ofstream history(session_dir + "/conversation.jsonl", std::ios::app);
-    std::cout << "CogniCore CPU-only chat pronto. Digite 'sair' para encerrar.\n";
+    std::cout << "CogniCore CPU-only chat pronto. Aprendizado online: "
+              << (session.online_learning() ? "ligado" : "desligado")
+              << ". Digite 'sair' para encerrar.\n";
     std::string line;
     while (true) {
         std::cout << "\nVoce> " << std::flush;

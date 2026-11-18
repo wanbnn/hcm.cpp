@@ -1,0 +1,20 @@
+O motor de combustão interna produz trabalho pela expansão da queima da mistura de ar com combustível.
+A combustão é um processo químico que libera calor.
+O motor de combustão interna transforma a queima da mistura em movimento de rotação.
+O cabeçote contém as câmaras de combustão.
+O bloco contém os cilindros.
+O conjunto móvel contém as bielas e os êmbolos.
+A biela conecta o êmbolo à árvore de manivelas.
+A árvore de manivelas transforma o movimento linear do êmbolo em rotação.
+O êmbolo comprime a mistura na câmara de combustão.
+A vela de ignição inflama a mistura comprimida.
+A válvula de admissão permite a entrada da mistura de ar e combustível.
+A válvula de escapamento permite a saída dos gases queimados.
+O volante regulariza o funcionamento do motor.
+O ciclo Otto usa a centelha da vela de ignição.
+O motor de quatro tempos completa o ciclo em duas voltas da árvore de manivelas.
+O tempo de admissão aspira a mistura de ar e combustível.
+O tempo de compressão comprime a mistura.
+O tempo de combustão produz trabalho.
+O tempo de escapamento expulsa os gases da combustão.
+O motor diesel tem um funcionamento semelhante ao ciclo Otto.

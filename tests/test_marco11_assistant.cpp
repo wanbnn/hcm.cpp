@@ -15,6 +15,7 @@ int main() {
     assert(router.classify("Explique a função double_value", bundle) == AssistantRoute::CODE_QUERY_OR_EXPLAIN);
     assert(router.classify("Gere uma função para combinar double_value e increment", bundle) == AssistantRoute::CODE_GENERATE_OR_PATCH);
     AssistantSession session(bundle);
+    session.set_online_learning(true); // this test exercises the opt-in learning path
     auto fact = session.respond("O atrito gera calor.");
     assert(fact.route == AssistantRoute::FACT_UPDATE);
     session.respond("O calor derrete gelo.");
@@ -97,6 +98,7 @@ int main() {
     ModelBundle reloaded;
     assert(reloaded.load(dir.string()));
     AssistantSession resumed(reloaded);
+    resumed.set_online_learning(true);
     const auto explanation = resumed.respond("Explique a função double_value");
     assert(explanation.text.find("Retorno: int") != std::string::npos);
     assert(!reloaded.graph.query_direct("atrito").empty());

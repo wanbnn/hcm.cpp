@@ -71,6 +71,25 @@ licença para o texto derivado da Wikipédia.
 3. `scripts/train_portuguese_model.py` treina com `--max-vocab 48000
    --context-stride 2 --use-gpu` usando o binário HIP/ROCm.
 
+O modo padrão do corpus é `--style-only` (vocabulário/estilo). Para extrair
+também triplas factuais do texto, use `--fact-n-style-only` no `ingest-books`
+ou `--style-facts` no script de treino. O parser de regras é conservador, mas
+texto enciclopédico/PDF ainda pode gerar triplas ruidosas; valide o grafo
+antes de tratar tudo como conhecimento asserido.
+
+Para acrescentar fatos a um modelo já treinado sem mexer no vocabulário, no
+léxico, na coerência ou no classificador de diálogo, use `--facts-only`:
+
+```bash
+./build/cognicore ingest-books --input data/conversation_pt/engine_facts.txt \
+  --model models/conversa-pt-fluent-v3.1 --facts-only
+./build/cognicore consolidate --model models/conversa-pt-fluent-v3.1
+```
+
+Esse modo grava apenas grafo causal + SDM. É o caminho recomendado para fatos
+curados de um domínio (por exemplo, motores), porque preserva as métricas de
+intenção e evita que o texto factual desloque o codebook.
+
 ```bash
 python3 scripts/fetch_public_pt_corpus.py \
   --out /run/media/wanderson/DADOS_1TB/cognicore/data/public_pt_v31 \
@@ -92,6 +111,15 @@ CLI; os estágios Tsetlin/SDM e o treino do realizador usam HIP/ROCm quando
 `--use-gpu` está presente. A inferência (`chat`, `write`, `math`, benchmarks)
 usa o binário CPU `build/cognicore`.
 
+O chat não aprende fatos por padrão. `--online-learning` é opt-in; sem ele, uma
+pergunta/instrução nunca é gravada no grafo. Os livros, a Wikipédia e o PDF
+foram ingeridos com `--style-only`, então alimentam vocabulário, léxico,
+coerência, DOP/PPM e realizações — não o grafo factual. O grafo da v3.1
+continua sendo o `facts.conllu` curado (19 nós/12 arestas), por isso ela
+consegue explicar calor/atrito/gelo e não “motor de carro”. Para fatos sobre
+motores seria necessário ingerir/curar triplas desse domínio, não apenas o
+texto da apostila.
+
 ### Treino Tsetlin residente na VRAM
 
 `TsetlinMachine::fit(..., use_gpu=true)` usa
@@ -108,20 +136,51 @@ continuam em RAM: são estruturas sequenciais de indexação, não o estado do
 classificador Tsetlin. Os dois caminhos (CPU e VRAM) são verificados como
 numericamente idênticos em `test_hip_equiv`.
 
+### Fatos de domínio: motor
+
+A apostila do SENAI é texto técnico. Ingeri-la inteira como fatos gera ruído:
+o parser extraiu **2.320 triplas / 2.804 nós** só das 10 páginas, quase uma
+tripla a cada 8 palavras. Por isso o corpus completo continua em
+`--style-only`.
+
+Para o exemplo de motores, foi criado
+`data/conversation_pt/engine_facts.txt` com 19 frases verificadas da apostila
+(combustão, quatro tempos, válvulas, biela, árvore de manivelas, ciclo Otto).
+A ingestão com `--facts-only` adicionou 31 triplas e elevou o grafo de 19/12
+para **63 nós / 43 arestas**, sem alterar codebook, léxico, coerência ou o
+classificador de diálogo. O heldout ficou em 741/1.060 e os probes em 18/18.
+
+Exemplos de resposta após essa ingestão:
+
+```text
+Você> Como funciona o motor de combustão interna?
+CogniCore> O motor transforma o combustão. Alternativamente, o combustão é um processo químico que libera calor.
+
+Você> O que é o ciclo Otto?
+CogniCore> O ciclo usa o centelha.
+```
+
+O conteúdo agora vem do grafo, mas a superfície ainda revela limitações do
+parser: termos multi-palavra viram cabeças curtas (`motor de combustão
+interna` → `motor`) e a concordância de algumas realizações sai errada
+(`o combustão`, `o vela`). Corrigir isso exige melhorar a extração
+multi-palavra/gênero, não apenas aumentar o corpus.
+
 ## Métricas
 
 Artefato final: 48.008 tokens no codebook VSA (teto de 48.000 + os 8 tokens
-especiais), 19 nós e 12 arestas no grafo factual, 55 frames, 2.048 produções
-DOP, 80.000 contextos PPM e 8.900.814 n-gramas.
+especiais), 63 nós e 43 arestas no grafo factual (19/12 do núcleo curado +
+fatos de motor), 55 frames, 2.048 produções DOP, 80.000 contextos PPM e
+8.900.814 n-gramas.
 
 | Item | v3.1 |
 |---|---:|
 | Vocabulário VSA | 48.008 tokens |
 | Léxico do corpus | 353.317 entradas, 1.005.066 colocações |
 | Coerência KN | 359.940 unigramas, 2.930.398 bigramas, 5.968.686 trigramas |
-| Disco | 555.632 KB (~543 MB) |
-| RAM estimada pelo `stats` | 1.397.910 KB (~1,33 GB) |
-| Intenção reservada (heldout) | 740/1.060 (69,81%) |
+| Disco | 556.176 KB (~543 MB) |
+| RAM estimada pelo `stats` | 1.397.920 KB (~1,33 GB) |
+| Intenção reservada (heldout) | 741/1.060 (69,91%) |
 | Probes sintéticos | 18/18 (100%) |
 | Calibração PPM (`heldout_pt.txt`) | 2,2656 bits/byte; perplexidade 4,8084 |
 

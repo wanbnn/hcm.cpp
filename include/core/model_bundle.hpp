@@ -73,7 +73,7 @@ struct ModelBundle {
         std::string response;
         std::string debug_report() const;
     };
-    InferenceTrace infer_and_respond(const std::string& user_text, bool online_learn = true,
+    InferenceTrace infer_and_respond(const std::string& user_text, bool online_learn = false,
                                      const ISurfaceRealizer* surface = nullptr);
 
     /// Saves all model components into `dir_path` in compact binary format.

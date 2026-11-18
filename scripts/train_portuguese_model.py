@@ -18,6 +18,8 @@ def main():
     parser.add_argument('--clauses', type=int, default=20)
     parser.add_argument('--max-vocab', type=int, default=16000)
     parser.add_argument('--context-stride', type=int, default=4)
+    parser.add_argument('--style-facts', action='store_true',
+                        help='also extract graph facts from the style corpus (default: style only)')
     parser.add_argument('--use-gpu', action='store_true')
     parser.add_argument('--resume-policy', action='store_true')
     args = parser.parse_args()
@@ -44,7 +46,8 @@ def main():
 
     if not args.resume_policy:
         run('style', 'ingest-books', '--input', args.data / 'style', '--model', args.model,
-            '--style-only', '--max-vocab', str(args.max_vocab),
+            '--fact-n-style-only' if args.style_facts else '--style-only',
+            '--max-vocab', str(args.max_vocab),
             '--context-stride', str(args.context_stride))
         run('facts', 'ingest-books', '--input', args.data / 'facts.conllu', '--model', args.model,
             '--parser', 'conllu', gpu=True)
@@ -61,6 +64,7 @@ def main():
     report = {'architecture': 'symbolic; no neural network or backpropagation',
               'stages': stages, 'epochs': args.epochs, 'clauses_per_class': args.clauses,
               'max_vocab': args.max_vocab, 'context_stride': args.context_stride,
+              'style_facts': args.style_facts,
               'gpu_requested': args.use_gpu, 'binary': str(args.cli)}
     (args.model / 'training_report.json').write_text(json.dumps(report, indent=2, ensure_ascii=False) + '\n')
     print(json.dumps(report, ensure_ascii=False), flush=True)

@@ -81,6 +81,7 @@ with tempfile.TemporaryDirectory(prefix='cognicore_cli_') as directory:
     unsupported_export = subprocess.run([cli, 'export-realizer-dataset', '--model', str(model)], capture_output=True)
     assert unsupported_export.returncode != 0
     result = run('chat', '--model', model, '--workspace', repo, '--lang', 'py', '--debug',
+                 '--online-learning',
                  input='O atrito gera calor.\nPor que o atrito causa gelo?\nGere uma função para combinar identity e count\nsair\n')
     for route in ['FACT_UPDATE', 'CAUSAL_REASONING', 'CODE_GENERATE_OR_PATCH']:
         assert route in result, result

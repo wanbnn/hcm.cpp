@@ -28,12 +28,15 @@ public:
     }
     AssistantReply respond(const std::string& input, CodeLanguage language = CodeLanguage::CPP,
                            const ISurfaceRealizer* mouth = nullptr);
+    void set_online_learning(bool enabled) { online_learning_ = enabled; }
+    bool online_learning() const { return online_learning_; }
 private:
     ModelBundle& model_;
     AssistantRouter router_;
     CodeSynthesizer synthesizer_;
     AssistantRoute last_route_ = AssistantRoute::CONVERSATIONAL_GENERAL;
     std::string last_code_task_;
+    bool online_learning_ = false;
 };
 std::string json_escape(const std::string& text);
 std::string realizer_pair_json(const ParsedTriple& triple);

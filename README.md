@@ -36,6 +36,8 @@ fixadas. Asserções ficam ativas nos testes mesmo em Release.
 
 ```bash
 ./build_rocm/cognicore ingest-books --input livros/ --model modelo --use-gpu
+./build_rocm/cognicore ingest-books --input livros/ --model modelo --fact-n-style-only --use-gpu
+./build_rocm/cognicore ingest-books --input fatos.txt --model modelo --facts-only
 ./build_rocm/cognicore ingest-books --input analise.conllu --model modelo --parser conllu
 ./build_rocm/cognicore train-dialogue --input conversas.jsonl --model modelo --epochs 20 --use-gpu
 ./build_rocm/cognicore consolidate --model modelo
@@ -79,7 +81,10 @@ não há treino de uma rede neural.
 
 `assistant` é um alias de `chat`. `--lang` seleciona a linguagem do código.
 O chat é o ponto único de entrada: o mesmo prompt pode pedir conversa, texto
-longo, matemática, código ou atualização de fato. Exemplos:
+longo, matemática, código ou atualização de fato. O aprendizado online fica
+desligado por padrão; use `--online-learning` apenas quando quiser que uma
+afirmação do usuário seja gravada no grafo. Textos ingeridos com `--style-only`
+(livros, Wikipédia, PDFs) ensinam vocabulário/estilo, não fatos. Exemplos:
 
 ```text
 Você> Escreva um texto sobre calor
@@ -179,7 +184,9 @@ treino de diálogo, mas amplia o corpus linguístico com 695 artigos da Wikipéd
 em português, 99 livros de domínio público do Project Gutenberg e PDFs
 educacionais públicos — cerca de 66 MB de texto, 10,4 milhões de tokens e
 vocabulário VSA de 48 mil tipos. O treino simbólico roda em HIP/ROCm e a
-inferência conversacional continua em CPU. Ficha:
+inferência conversacional continua em CPU. A v3.1 também aceita fatos
+curados com `--facts-only` (grafo + SDM, sem deslocar o codebook); o conjunto
+`data/conversation_pt/engine_facts.txt` adiciona fatos de motor. Ficha:
 [modelo v3.1](docs/MODEL_CONVERSA_PT_FLUENT_V31.md).
 
 ## Benchmarks próprios
